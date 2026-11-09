@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -24,6 +25,7 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -70,6 +72,9 @@ fun ChinaMapCanvas(
     val context = LocalContext.current
     val provinces = remember { ChinaMapData.load(context) }
     val provinceBounds = remember { ChinaMapData.loadProvinceBounds(context) }
+    val provinceBBoxes = remember(provinceBounds) {
+        provinceBounds.associate { it.adcode to it.bounds }
+    }
     val textMeasurer = rememberTextMeasurer()
     val accent = section.accent
 
@@ -170,6 +175,25 @@ fun ChinaMapCanvas(
 
         fun toScreen(vx: Float, vy: Float) = Offset(vx * k + dx, vy * k + dy)
 
+        /**
+         * 名字只有在地块的屏幕外接框里装得下才画，且位置钳在框内，保证不越界。
+         * [minRatio] 宽度阈值倍数：点亮城市/省名用宽松值尽量常显，未点亮城市用严格值避免挤成一团。
+         */
+        fun drawFitted(layout: TextLayoutResult, bbox: Rect, color: Color, minRatio: Float) {
+            val tl = toScreen(bbox.left, bbox.top)
+            val br = toScreen(bbox.right, bbox.bottom)
+            val bw = br.x - tl.x
+            val bh = br.y - tl.y
+            val tw = layout.size.width.toFloat()
+            val th = layout.size.height.toFloat()
+            if (bw < tw * minRatio || bh < th * 1.6f) return
+            val cx = (tl.x + br.x) / 2f
+            val cy = (tl.y + br.y) / 2f
+            val x = (cx - tw / 2f).coerceIn(tl.x, (br.x - tw).coerceAtLeast(tl.x))
+            val y = (cy - th / 2f).coerceIn(tl.y, (br.y - th).coerceAtLeast(tl.y))
+            drawText(layout, color = color, topLeft = Offset(x, y))
+        }
+
         // 城市地块：点亮填应援色，未点亮填表面色；选中的加高亮描边
         provinces.forEach { p ->
             val visited = visitedAdcodes.contains(p.adcode)
@@ -196,38 +220,23 @@ fun ChinaMapCanvas(
             }
         }
 
-        // 全国视图：省名（灰）+ 点亮城市名（应援色）；放大 2x 后展开全部城市名
-        if (scale >= 2f) {
-            provinces.forEach { p ->
-                val lit = visitedAdcodes.contains(p.adcode)
-                val layout = labelLayouts[p.adcode] ?: return@forEach
-                val c = toScreen(p.center.x, p.center.y)
-                drawText(
-                    textLayoutResult = layout,
-                    color = if (lit) accent else UnlitLabel.copy(alpha = 0.7f),
-                    topLeft = Offset(c.x - layout.size.width / 2f, c.y - layout.size.height / 2f),
-                )
-            }
-        } else {
-            provinceLabels.forEach { label ->
-                val layout = provinceLayouts[label.name] ?: return@forEach
-                val c = toScreen(label.x, label.y)
-                drawText(
-                    textLayoutResult = layout,
-                    color = UnlitLabel,
-                    topLeft = Offset(c.x - layout.size.width / 2f, c.y - layout.size.height / 2f),
-                )
-            }
-            provinces.forEach { p ->
-                if (!visitedAdcodes.contains(p.adcode)) return@forEach
-                val layout = labelLayouts[p.adcode] ?: return@forEach
-                val c = toScreen(p.center.x, p.center.y)
-                drawText(
-                    textLayoutResult = layout,
-                    color = accent,
-                    topLeft = Offset(c.x - layout.size.width / 2f, c.y - layout.size.height / 2f),
-                )
-            }
+        // 名字显示不再按固定缩放阈值，而是看每个地块在屏幕上是否装得下：
+        // 东部密集小城市要放大很多才出名字，西部广域市早早显示。
+        // 省名（宽松阈值）+ 点亮城市名（宽松阈值）+ 未点亮城市名（严格阈值）。
+        provinceLabels.forEach { label ->
+            val layout = provinceLayouts[label.name] ?: return@forEach
+            val bbox = provinceBBoxes[label.adcode] ?: return@forEach
+            drawFitted(layout, bbox, UnlitLabel, 1.05f)
+        }
+        provinces.forEach { p ->
+            val lit = visitedAdcodes.contains(p.adcode)
+            val layout = labelLayouts[p.adcode] ?: return@forEach
+            drawFitted(
+                layout,
+                p.bounds,
+                if (lit) accent else UnlitLabel.copy(alpha = 0.7f),
+                if (lit) 1.05f else 1.45f,
+            )
         }
 
         // 路线：3D 抛物线（向上拱、中间粗亮两端细淡、地面投影、飞行光点拖尾）

@@ -2,13 +2,15 @@ package com.vmap.app.core.map
 
 import android.content.Context
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Path
 import org.json.JSONObject
 
 /**
  * 一个城市的形状。坐标已换算成虚拟坐标系：
  * x = (lng - 73) / 62 * 1000，y = (54 - lat) / 36 * 580。
- * [rings] 是原始坐标点（用于点选判定），[path] 用于渲染，[center] 是外接框中心（用于放城市名）。
+ * [rings] 是原始坐标点（用于点选判定），[path] 用于渲染，[center] 是外接框中心（用于放城市名），
+ * [bounds] 是虚拟坐标外接框（判断名字是否装得下）。
  */
 class ProvinceShape(
     val adcode: String,
@@ -16,6 +18,7 @@ class ProvinceShape(
     val rings: List<List<Offset>>,
     val path: Path,
     val center: Offset,
+    val bounds: Rect,
 ) {
     fun contains(x: Float, y: Float): Boolean =
         rings.any { ring -> pointInPolygon(ring, x, y) }
@@ -99,6 +102,7 @@ object ChinaMapData {
                         rings = rings,
                         path = path,
                         center = Offset((minX + maxX) / 2, (minY + maxY) / 2),
+                        bounds = Rect(minX, minY, maxX, maxY),
                     )
                 )
             }
@@ -119,8 +123,8 @@ object ChinaMapData {
         }
     }
 
-    /** 省级边界，仅用于描边。 */
-    data class ProvinceBound(val path: Path)
+    /** 省级边界，仅用于描边与省名定位（bounds 是虚拟坐标外接框）。 */
+    data class ProvinceBound(val adcode: String, val path: Path, val bounds: Rect)
 
     @Volatile
     private var cachedBounds: List<ProvinceBound>? = null
@@ -156,7 +160,25 @@ object ChinaMapData {
                     }
                     path.close()
                 }
-                result.add(ProvinceBound(path))
+                var minX = Float.MAX_VALUE
+                var minY = Float.MAX_VALUE
+                var maxX = -Float.MAX_VALUE
+                var maxY = -Float.MAX_VALUE
+                rings.forEach { ring ->
+                    ring.forEach { pt ->
+                        if (pt.x < minX) minX = pt.x
+                        if (pt.y < minY) minY = pt.y
+                        if (pt.x > maxX) maxX = pt.x
+                        if (pt.y > maxY) maxY = pt.y
+                    }
+                }
+                result.add(
+                    ProvinceBound(
+                        adcode = f.getString("adcode"),
+                        path = path,
+                        bounds = Rect(minX, minY, maxX, maxY),
+                    )
+                )
             }
             cachedBounds = result
             return result
@@ -164,7 +186,7 @@ object ChinaMapData {
     }
 
     /** 省级名字与中心（虚拟坐标）。全国视图只显示省名用。 */
-    data class ProvinceLabel(val name: String, val x: Float, val y: Float)
+    data class ProvinceLabel(val adcode: String, val name: String, val x: Float, val y: Float)
 
     @Volatile
     private var cachedProvinceLabels: List<ProvinceLabel>? = null
@@ -177,16 +199,17 @@ object ChinaMapData {
             val root = JSONObject(json)
             val arr = root.getJSONArray("provinces")
             val list = ArrayList<ProvinceLabel>(arr.length())
-            for (i in 0 until arr.length()) {
-                val o = arr.getJSONObject(i)
-                list.add(
-                    ProvinceLabel(
-                        name = o.getString("name"),
-                        x = lngToX(o.getDouble("lng")),
-                        y = latToY(o.getDouble("lat")),
-                    )
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            list.add(
+                ProvinceLabel(
+                    adcode = o.getString("adcode"),
+                    name = o.getString("name"),
+                    x = lngToX(o.getDouble("lng")),
+                    y = latToY(o.getDouble("lat")),
                 )
-            }
+            )
+        }
             cachedProvinceLabels = list
             return list
         }
