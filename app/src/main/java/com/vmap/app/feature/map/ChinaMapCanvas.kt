@@ -138,13 +138,8 @@ fun ChinaMapCanvas(
             }
         }
 
-        // 路线：弧线 + 沿路径流动的箭头
+        // 路线：3D 抛物线（向上拱、中间粗亮两端细淡、地面投影、飞行光点拖尾）
         if (showRoute && route.size >= 2) {
-            val chevron = Path().apply {
-                moveTo(-5f, -6f)
-                lineTo(3f, 0f)
-                lineTo(-5f, 6f)
-            }
             route.zipWithNext { from, to ->
                 val a = toScreen(spotVirtual(from).x, spotVirtual(from).y)
                 val b = toScreen(spotVirtual(to).x, spotVirtual(to).y)
@@ -152,46 +147,44 @@ fun ChinaMapCanvas(
                 val ddy = b.y - a.y
                 val len = hypot(ddx, ddy).takeIf { it > 0f } ?: return@zipWithNext
 
+                // 控制点：统一向上拱（负 y），拱高随距离，模拟航线抬升
                 var nx = -ddy / len
                 var ny = ddx / len
-                if (ny < 0) {
+                if (ny > 0) {
                     nx = -nx
                     ny = -ny
                 }
-                val sag = len * 0.16f
-                val ctrl = Offset((a.x + b.x) / 2 + nx * sag, (a.y + b.y) / 2 + ny * sag)
+                val height = len * 0.28f
+                val ctrl = Offset((a.x + b.x) / 2 + nx * height, (a.y + b.y) / 2 + ny * height)
 
-                val curve = Path().apply {
-                    moveTo(a.x, a.y)
-                    quadraticBezierTo(ctrl.x, ctrl.y, b.x, b.y)
+                // 地面投影：两点间一条淡线，制造「抛物线浮在空中」的高度差
+                drawLine(accent.copy(alpha = 0.15f), a, b, strokeWidth = 1.5f, cap = StrokeCap.Round)
+
+                // 分段画抛物线：越靠近弧顶越粗越亮，模拟 3D 纵深
+                val segments = 36
+                for (i in 0 until segments) {
+                    val t0 = i / segments.toFloat()
+                    val t1 = (i + 1) / segments.toFloat()
+                    val p0 = quadPoint(a, ctrl, b, t0)
+                    val p1 = quadPoint(a, ctrl, b, t1)
+                    val tm = (t0 + t1) / 2
+                    val lift = 1f - kotlin.math.abs(tm - 0.5f) * 2f
+                    val width = 0.7f + 4.5f * lift
+                    val alpha = 0.30f + 0.70f * lift
+                    drawLine(accent.copy(alpha = alpha), p0, p1, strokeWidth = width, cap = StrokeCap.Round)
                 }
 
-                // 投影：向下偏移的暗色弧线，制造浮起感
-                withTransform({ translate(0f, 3f) }) {
-                    drawPath(curve, color = ShadowColor, style = Stroke(width = 4f, cap = StrokeCap.Round))
-                }
-                drawPath(curve, color = accent, style = Stroke(width = 2.5f, cap = StrokeCap.Round))
-
-                // 流动箭头：沿曲线从 a 滑到 b
+                // 飞行光点沿抛物线滑动，带拖尾
                 val t = flow
-                val u = 1f - t
-                val pos = Offset(
-                    u * u * a.x + 2 * u * t * ctrl.x + t * t * b.x,
-                    u * u * a.y + 2 * u * t * ctrl.y + t * t * b.y,
-                )
-                val dirx = 2 * u * (ctrl.x - a.x) + 2 * t * (b.x - ctrl.x)
-                val diry = 2 * u * (ctrl.y - a.y) + 2 * t * (b.y - ctrl.y)
-                val angle = Math.toDegrees(atan2(diry.toDouble(), dirx.toDouble())).toFloat()
-
-                // 流动的拖尾光晕
-                drawCircle(accent.copy(alpha = 0.25f), radius = 12f, center = pos)
-                drawCircle(accent.copy(alpha = 0.6f), radius = 6f, center = pos)
-                withTransform({
-                    translate(pos.x, pos.y)
-                    rotate(angle, pivot = Offset.Zero)
-                }) {
-                    drawPath(chevron, color = Color.White.copy(alpha = 0.9f), style = Stroke(width = 2.5f, cap = StrokeCap.Round))
+                val pos = quadPoint(a, ctrl, b, t)
+                for (k in 1..5) {
+                    val tt = (t - k * 0.035f).coerceIn(0f, 1f)
+                    val tail = quadPoint(a, ctrl, b, tt)
+                    val fade = (1f - k * 0.18f).coerceAtLeast(0f)
+                    drawCircle(accent.copy(alpha = 0.45f * fade), radius = 5f * (1f - k * 0.16f), center = tail)
                 }
+                drawCircle(accent.copy(alpha = 0.30f), radius = 10f, center = pos)
+                drawCircle(Color.White.copy(alpha = 0.95f), radius = 4f, center = pos)
             }
         }
 
@@ -222,4 +215,13 @@ fun ChinaMapCanvas(
             )
         }
     }
+}
+
+/** 二次贝塞尔曲线上的点。 */
+private fun quadPoint(a: Offset, c: Offset, b: Offset, t: Float): Offset {
+    val u = 1f - t
+    return Offset(
+        u * u * a.x + 2 * u * t * c.x + t * t * b.x,
+        u * u * a.y + 2 * u * t * c.y + t * t * b.y,
+    )
 }
