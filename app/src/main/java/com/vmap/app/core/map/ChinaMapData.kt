@@ -119,6 +119,50 @@ object ChinaMapData {
         }
     }
 
+    /** 省级边界，仅用于描边。 */
+    data class ProvinceBound(val path: Path)
+
+    @Volatile
+    private var cachedBounds: List<ProvinceBound>? = null
+
+    /** 省级边界（34 个），画在地级市之上，勾勒清晰的省界。 */
+    fun loadProvinceBounds(context: Context): List<ProvinceBound> {
+        cachedBounds?.let { return it }
+        synchronized(this) {
+            cachedBounds?.let { return it }
+            val json = context.assets.open("province_bounds.json").bufferedReader().use { it.readText() }
+            val root = JSONObject(json)
+            val features = root.getJSONArray("features")
+            val result = ArrayList<ProvinceBound>(features.length())
+            for (i in 0 until features.length()) {
+                val f = features.getJSONObject(i)
+                val type = f.getString("type")
+                val rings = ArrayList<List<Offset>>()
+                when (type) {
+                    "Polygon" -> collectRings(f.getJSONArray("coords"), rings)
+                    "MultiPolygon" -> {
+                        val arr = f.getJSONArray("coords")
+                        for (p in 0 until arr.length()) {
+                            collectRings(arr.getJSONArray(p), rings)
+                        }
+                    }
+                    else -> continue
+                }
+                if (rings.isEmpty()) continue
+                val path = Path()
+                rings.forEach { ring ->
+                    ring.forEachIndexed { j, pt ->
+                        if (j == 0) path.moveTo(pt.x, pt.y) else path.lineTo(pt.x, pt.y)
+                    }
+                    path.close()
+                }
+                result.add(ProvinceBound(path))
+            }
+            cachedBounds = result
+            return result
+        }
+    }
+
     /** 省级名字与中心（虚拟坐标）。全国视图只显示省名用。 */
     data class ProvinceLabel(val name: String, val x: Float, val y: Float)
 

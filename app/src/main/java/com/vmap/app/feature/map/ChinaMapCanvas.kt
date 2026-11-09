@@ -39,6 +39,9 @@ import kotlin.math.min
 
 private val UnlitProvince = Color(0xFF23272F)
 private val ProvinceBorder = Color(0xFF0F1115)
+
+/** 省级边界描边，比市界亮、粗，勾勒省轮廓。 */
+private val ProvinceBoundColor = Color(0xFF39404D)
 private val LabelColor = Color(0xFFE6E8EE)
 
 /** 未点亮城市名的颜色（低饱和灰，和应援色区分）。 */
@@ -66,6 +69,7 @@ fun ChinaMapCanvas(
 ) {
     val context = LocalContext.current
     val provinces = remember { ChinaMapData.load(context) }
+    val provinceBounds = remember { ChinaMapData.loadProvinceBounds(context) }
     val textMeasurer = rememberTextMeasurer()
     val accent = section.accent
 
@@ -179,6 +183,16 @@ fun ChinaMapCanvas(
                 if (p.adcode == selectedAdcode) {
                     drawPath(p.path, color = Color.White.copy(alpha = 0.85f), style = Stroke(width = 3f / k))
                 }
+            }
+        }
+
+        // 省级边界：在地级市之上勾勒省界，省名归属清晰
+        provinceBounds.forEach { b ->
+            withTransform({
+                translate(dx, dy)
+                scale(k, k, pivot = Offset.Zero)
+            }) {
+                drawPath(b.path, color = ProvinceBoundColor, style = Stroke(width = 1.4f / k))
             }
         }
 
