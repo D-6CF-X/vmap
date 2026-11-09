@@ -1,7 +1,5 @@
 package com.vmap.app.feature.map
 
-import android.content.Context
-import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -21,7 +18,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,25 +25,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.amap.api.maps.AMap
-import com.amap.api.maps.CameraUpdateFactory
-import com.amap.api.maps.MapView
-import com.amap.api.maps.model.LatLng
-import com.amap.api.maps.model.LatLngBounds
-import com.amap.api.maps.model.MarkerOptions
-import com.amap.api.maps.model.PolylineOptions
-import com.vmap.app.BuildConfig
-import com.vmap.app.core.ui.MapIcons
 import com.vmap.app.core.ui.accent
 import com.vmap.app.domain.model.Section
 import com.vmap.app.domain.model.Spot
@@ -68,7 +50,7 @@ fun MapScreen(
     var detailSpot by remember { mutableStateOf<Spot?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        MapCanvas(
+        ChinaMapCanvas(
             modifier = Modifier.fillMaxSize(),
             spots = spots,
             route = route,
@@ -193,177 +175,7 @@ private fun SectionChip(
             fontSize = 14.sp,
             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
             modifier = Modifier.padding(vertical = 10.dp),
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
-    }
-}
-
-/**
- * 地图入口。有高德 Key 用高德，没有就降级到 osmdroid。
- *
- * 关键：Android 16 及以上强制走 osmdroid。高德 SDK 的 native 库（libAMapSDK_MAP_*.so）
- * 至今仍是 4KB 页对齐，没有发布 16KB 对齐版本，在 16KB 内存页的设备上加载 so 直接崩溃。
- * osmdroid 是纯 Java 实现，没有 so，所以是 Android 16 上唯一能跑的选择。
- *
- * 这个判断用 SDK_INT < 36 而不是运行时试加载，因为 native 崩溃是进程级致命错误，捕获不了。
- */
-@Composable
-private fun MapCanvas(
-    modifier: Modifier,
-    spots: List<Spot>,
-    route: List<Spot>,
-    section: Section,
-    showRoute: Boolean,
-    onSpotClick: (Spot) -> Unit,
-) {
-    val useAmap = BuildConfig.HAS_AMAP_KEY && !BuildConfig.FORCE_OSM && Build.VERSION.SDK_INT < 36
-    if (useAmap) {
-        AmapCanvas(
-            modifier = modifier,
-            spots = spots,
-            route = route,
-            section = section,
-            showRoute = showRoute,
-            onSpotClick = onSpotClick,
-        )
-    } else {
-        OsmCanvas(
-            modifier = modifier,
-            spots = spots,
-            route = route,
-            section = section,
-            showRoute = showRoute,
-        )
-    }
-}
-
-@Composable
-private fun AmapCanvas(
-    modifier: Modifier,
-    spots: List<Spot>,
-    route: List<Spot>,
-    section: Section,
-    showRoute: Boolean,
-    onSpotClick: (Spot) -> Unit,
-) {
-    val context = LocalContext.current
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val mapView = remember { MapView(context) }
-    var aMap by remember { mutableStateOf<AMap?>(null) }
-    var loaded by remember { mutableStateOf(false) }
-
-    androidx.compose.runtime.DisposableEffect(Unit) {
-        mapView.onCreate(null)
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_RESUME -> mapView.onResume()
-                Lifecycle.Event.ON_PAUSE -> mapView.onPause()
-                else -> Unit
-            }
-        }
-        lifecycle.addObserver(observer)
-        onDispose {
-            lifecycle.removeObserver(observer)
-            mapView.onDestroy()
-        }
-    }
-
-    AndroidView(
-        modifier = modifier,
-        factory = {
-            mapView.apply {
-                map?.apply {
-                    mapType = AMap.MAP_TYPE_NIGHT
-                    uiSettings.isZoomControlsEnabled = false
-                    uiSettings.isRotateGesturesEnabled = false
-                    uiSettings.isTiltGesturesEnabled = false
-                    uiSettings.isMyLocationButtonEnabled = false
-                    setOnMapLoadedListener {
-                        aMap = this
-                        loaded = true
-                    }
-                    setOnMarkerClickListener { marker ->
-                        val found = spots.firstOrNull { it.title == marker.snippet && it.cityName == marker.title }
-                        if (found != null) {
-                            onSpotClick(found)
-                            true
-                        } else {
-                            false
-                        }
-                    }
-                }
-            }
-        },
-    )
-
-    LaunchedEffect(loaded, spots, route, section, showRoute) {
-        val map = aMap ?: return@LaunchedEffect
-        redraw(map, section, spots, route, showRoute)
-    }
-
-    LaunchedEffect(loaded, section) {
-        val map = aMap ?: return@LaunchedEffect
-        val targets = spots.ifEmpty { route }
-        if (targets.isEmpty()) {
-            map.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(34.2, 108.9), 3.6f))
-            return@LaunchedEffect
-        }
-        if (targets.size == 1) {
-            map.moveCamera(
-                CameraUpdateFactory.newLatLngZoom(
-                    LatLng(targets.first().lat, targets.first().lng),
-                    9f,
-                )
-            )
-        } else {
-            val bounds = LatLngBounds.Builder().apply {
-                targets.forEach { include(LatLng(it.lat, it.lng)) }
-            }.build()
-            map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, 160))
-        }
-    }
-}
-
-private fun redraw(
-    map: AMap,
-    section: Section,
-    spots: List<Spot>,
-    route: List<Spot>,
-    showRoute: Boolean,
-) {
-    map.clear()
-    val accentArgb = section.accent.toArgb()
-    val dot = MapIcons.cityDot(accentArgb)
-
-    if (showRoute && route.size >= 2) {
-        val points = route.map { LatLng(it.lat, it.lng) }
-        map.addPolyline(
-            PolylineOptions()
-                .addAll(points)
-                .width(7f)
-                .color(accentArgb and 0x66FFFFFF),
-        )
-        route.zipWithNext { from, to ->
-            val a = LatLng(from.lat, from.lng)
-            val b = LatLng(to.lat, to.lng)
-            val angle = MapIcons.bearing(a.latitude, a.longitude, b.latitude, b.longitude)
-            map.addMarker(
-                MarkerOptions()
-                    .position(LatLng((a.latitude + b.latitude) / 2, (a.longitude + b.longitude) / 2))
-                    .icon(MapIcons.arrow(accentArgb, angle))
-                    .anchor(0.5f, 0.5f),
-            )
-        }
-    }
-
-    spots.forEach { spot ->
-        map.addMarker(
-            MarkerOptions()
-                .position(LatLng(spot.lat, spot.lng))
-                .icon(dot)
-                .anchor(0.5f, 0.5f)
-                .title(spot.cityName)
-                .snippet(spot.title),
+            textAlign = TextAlign.Center,
         )
     }
 }
