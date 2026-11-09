@@ -47,16 +47,6 @@ private val UnlitLabel = Color(0xFF5A6170)
 /** 阴影色。 */
 private val ShadowColor = Color(0x55000000)
 
-/** 省会和计划单列市的 adcode。全国视图只显示这些 + 点亮城市的名字。 */
-private val CAPITAL_ADCODES = setOf(
-    "110000", "120000", "310000", "500000",
-    "440100", "510100", "330100", "420100", "320100", "610100", "430100",
-    "410100", "210100", "370100", "230100", "220100", "350100", "340100",
-    "360100", "530100", "520100", "450100", "140100", "130100", "620100",
-    "630100", "640100", "650100", "150100", "540100", "460100",
-    "440300", "370200", "210200", "350200",
-)
-
 /**
  * 自绘中国地图。去过城市整块填应援色，所有城市名都显示（点亮的用应援色），
  * 点击任意城市地块有选中高亮。路线为 3D 抛物线航线，城市点带呼吸光晕。
@@ -106,6 +96,18 @@ fun ChinaMapCanvas(
                 text = AnnotatedString(p.name),
                 style = TextStyle(fontSize = 10.sp),
                 constraints = Constraints(maxWidth = 200),
+            )
+        }
+    }
+
+    // 省级名字（全国视图只显示省名用）
+    val provinceLabels = remember { ChinaMapData.loadProvinceLabels(context) }
+    val provinceLayouts = remember(provinceLabels) {
+        provinceLabels.associate { label ->
+            label.name to textMeasurer.measure(
+                text = AnnotatedString(label.name),
+                style = TextStyle(fontSize = 13.sp),
+                constraints = Constraints(maxWidth = 300),
             )
         }
     }
@@ -180,23 +182,38 @@ fun ChinaMapCanvas(
             }
         }
 
-        // 所有城市名：点亮用应援色，未点亮用低饱和灰。
-        // 全国视图只显示点亮城市和省会（避免 370 个名字互相淹没），放大后展开全部。
-        val showAll = scale >= 2f
-        provinces.forEach { p ->
-            val lit = visitedAdcodes.contains(p.adcode)
-            if (!lit && !showAll && p.adcode !in CAPITAL_ADCODES) return@forEach
-            val layout = labelLayouts[p.adcode] ?: return@forEach
-            val c = toScreen(p.center.x, p.center.y)
-            drawText(
-                textLayoutResult = layout,
-                color = when {
-                    lit -> accent
-                    showAll -> UnlitLabel.copy(alpha = 0.7f)
-                    else -> UnlitLabel
-                },
-                topLeft = Offset(c.x - layout.size.width / 2f, c.y - layout.size.height / 2f),
-            )
+        // 全国视图：省名（灰）+ 点亮城市名（应援色）；放大 2x 后展开全部城市名
+        if (scale >= 2f) {
+            provinces.forEach { p ->
+                val lit = visitedAdcodes.contains(p.adcode)
+                val layout = labelLayouts[p.adcode] ?: return@forEach
+                val c = toScreen(p.center.x, p.center.y)
+                drawText(
+                    textLayoutResult = layout,
+                    color = if (lit) accent else UnlitLabel.copy(alpha = 0.7f),
+                    topLeft = Offset(c.x - layout.size.width / 2f, c.y - layout.size.height / 2f),
+                )
+            }
+        } else {
+            provinceLabels.forEach { label ->
+                val layout = provinceLayouts[label.name] ?: return@forEach
+                val c = toScreen(label.x, label.y)
+                drawText(
+                    textLayoutResult = layout,
+                    color = UnlitLabel,
+                    topLeft = Offset(c.x - layout.size.width / 2f, c.y - layout.size.height / 2f),
+                )
+            }
+            provinces.forEach { p ->
+                if (!visitedAdcodes.contains(p.adcode)) return@forEach
+                val layout = labelLayouts[p.adcode] ?: return@forEach
+                val c = toScreen(p.center.x, p.center.y)
+                drawText(
+                    textLayoutResult = layout,
+                    color = accent,
+                    topLeft = Offset(c.x - layout.size.width / 2f, c.y - layout.size.height / 2f),
+                )
+            }
         }
 
         // 路线：3D 抛物线（向上拱、中间粗亮两端细淡、地面投影、飞行光点拖尾）

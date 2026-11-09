@@ -118,6 +118,35 @@ object ChinaMapData {
             if (points.isNotEmpty()) out.add(points)
         }
     }
+
+    /** 省级名字与中心（虚拟坐标）。全国视图只显示省名用。 */
+    data class ProvinceLabel(val name: String, val x: Float, val y: Float)
+
+    @Volatile
+    private var cachedProvinceLabels: List<ProvinceLabel>? = null
+
+    fun loadProvinceLabels(context: Context): List<ProvinceLabel> {
+        cachedProvinceLabels?.let { return it }
+        synchronized(this) {
+            cachedProvinceLabels?.let { return it }
+            val json = context.assets.open("provinces.json").bufferedReader().use { it.readText() }
+            val root = JSONObject(json)
+            val arr = root.getJSONArray("provinces")
+            val list = ArrayList<ProvinceLabel>(arr.length())
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                list.add(
+                    ProvinceLabel(
+                        name = o.getString("name"),
+                        x = lngToX(o.getDouble("lng")),
+                        y = latToY(o.getDouble("lat")),
+                    )
+                )
+            }
+            cachedProvinceLabels = list
+            return list
+        }
+    }
 }
 
 /** 射线法判定点是否在多边形内。 */
