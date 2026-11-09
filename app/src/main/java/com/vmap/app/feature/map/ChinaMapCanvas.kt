@@ -1,5 +1,11 @@
 package com.vmap.app.feature.map
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -30,21 +36,16 @@ import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.math.min
 
-/** 未点亮省份的填充色（暗色主题下的表面色）。 */
 private val UnlitProvince = Color(0xFF23272F)
-
-/** 省界描边，用背景色制造分隔感。 */
 private val ProvinceBorder = Color(0xFF0F1115)
-
-/** 城市名文字颜色。 */
 private val LabelColor = Color(0xFFE6E8EE)
 
+/** 阴影色，用在点、线下方制造立体感。 */
+private val ShadowColor = Color(0x55000000)
+
 /**
- * 自绘中国地图：省份按是否点亮填充应援色，城市点带名字，支持双指缩放和拖动。
- *
- * 不用任何地图 SDK 的原因：目标效果就是一张静态行政区图（区域点亮 + 城市标注），
- * 瓦片地图反而带来网络依赖、坐标系混用和 Android 16 的 so 兼容问题。
- * 一份 400KB 的边界数据 + Canvas，全离线、全可控。
+ * 自绘中国地图：去过省份整块填应援色，城市点带呼吸光晕与投影，
+ * 路线为弧线，箭头沿路径流动。全部 Canvas 绘制，离线可用。
  */
 @Composable
 fun ChinaMapCanvas(
@@ -66,6 +67,18 @@ fun ChinaMapCanvas(
 
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
+
+    // 单个动画时钟，同时驱动路线流动和城市呼吸，相位错开
+    val transition = rememberInfiniteTransition(label = "map")
+    val flow by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2600, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "flow",
+    )
 
     val labelStyle = TextStyle(color = LabelColor, fontSize = 13.sp)
 
@@ -125,7 +138,7 @@ fun ChinaMapCanvas(
             }
         }
 
-        // 路线：弧线 + 细小 V 形箭头，避免直线加实心三角的生硬感
+        // 路线：弧线 + 沿路径流动的箭头
         if (showRoute && route.size >= 2) {
             val chevron = Path().apply {
                 moveTo(-5f, -6f)
@@ -135,13 +148,12 @@ fun ChinaMapCanvas(
             route.zipWithNext { from, to ->
                 val a = toScreen(spotVirtual(from).x, spotVirtual(from).y)
                 val b = toScreen(spotVirtual(to).x, spotVirtual(to).y)
-                val dx = b.x - a.x
-                val dy = b.y - a.y
-                val len = hypot(dx, dy).takeIf { it > 0f } ?: return@zipWithNext
+                val ddx = b.x - a.x
+                val ddy = b.y - a.y
+                val len = hypot(ddx, ddy).takeIf { it > 0f } ?: return@zipWithNext
 
-                // 控制点：中点沿垂直方向偏移，弧线统一向下微弯，像地图上的路径
-                var nx = -dy / len
-                var ny = dx / len
+                var nx = -ddy / len
+                var ny = ddx / len
                 if (ny < 0) {
                     nx = -nx
                     ny = -ny
@@ -153,30 +165,55 @@ fun ChinaMapCanvas(
                     moveTo(a.x, a.y)
                     quadraticBezierTo(ctrl.x, ctrl.y, b.x, b.y)
                 }
+
+                // 投影：向下偏移的暗色弧线，制造浮起感
+                withTransform({ translate(0f, 3f) }) {
+                    drawPath(curve, color = ShadowColor, style = Stroke(width = 4f, cap = StrokeCap.Round))
+                }
                 drawPath(curve, color = accent, style = Stroke(width = 2.5f, cap = StrokeCap.Round))
 
-                // 箭头放在弧线顶点（t=0.5），方向沿切线（平行于端点连线）
-                val arcMid = Offset(
-                    (a.x + 2 * ctrl.x + b.x) / 4,
-                    (a.y + 2 * ctrl.y + b.y) / 4,
+                // 流动箭头：沿曲线从 a 滑到 b
+                val t = flow
+                val u = 1f - t
+                val pos = Offset(
+                    u * u * a.x + 2 * u * t * ctrl.x + t * t * b.x,
+                    u * u * a.y + 2 * u * t * ctrl.y + t * t * b.y,
                 )
-                val angle = Math.toDegrees(
-                    atan2(dy.toDouble(), dx.toDouble()),
-                ).toFloat()
+                val dirx = 2 * u * (ctrl.x - a.x) + 2 * t * (b.x - ctrl.x)
+                val diry = 2 * u * (ctrl.y - a.y) + 2 * t * (b.y - ctrl.y)
+                val angle = Math.toDegrees(atan2(diry.toDouble(), dirx.toDouble())).toFloat()
+
+                // 流动的拖尾光晕
+                drawCircle(accent.copy(alpha = 0.25f), radius = 12f, center = pos)
+                drawCircle(accent.copy(alpha = 0.6f), radius = 6f, center = pos)
                 withTransform({
-                    translate(arcMid.x, arcMid.y)
+                    translate(pos.x, pos.y)
                     rotate(angle, pivot = Offset.Zero)
                 }) {
-                    drawPath(chevron, color = accent, style = Stroke(width = 2.5f, cap = StrokeCap.Round))
+                    drawPath(chevron, color = Color.White.copy(alpha = 0.9f), style = Stroke(width = 2.5f, cap = StrokeCap.Round))
                 }
             }
         }
 
-        // 城市点 + 城市名
-        spots.forEach { spot ->
+        // 城市点：投影 + 呼吸光晕 + 高光，制造立体感
+        spots.forEachIndexed { index, spot ->
             val pos = toScreen(spotVirtual(spot).x, spotVirtual(spot).y)
+            val pulse = (flow + index.toFloat() / (spots.size.coerceAtLeast(1))) % 1f
+
+            // 投影
+            drawCircle(ShadowColor, radius = 13f, center = pos + Offset(0f, 4f))
+            // 呼吸光晕（放大淡出）
+            drawCircle(
+                accent.copy(alpha = 0.35f * (1f - pulse)),
+                radius = 12f + 10f * pulse,
+                center = pos,
+            )
+            // 主体
             drawCircle(Color.White, radius = 12f, center = pos)
             drawCircle(accent, radius = 9f, center = pos)
+            // 左上高光，模拟球面反光
+            drawCircle(Color.White.copy(alpha = 0.75f), radius = 3f, center = pos + Offset(-3f, -3f))
+            // 城市名
             drawText(
                 textMeasurer = textMeasurer,
                 text = spot.cityName,
