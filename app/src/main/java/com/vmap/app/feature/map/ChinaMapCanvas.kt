@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
@@ -124,28 +125,49 @@ fun ChinaMapCanvas(
             }
         }
 
-        // 路线连线与方向箭头
+        // 路线：弧线 + 细小 V 形箭头，避免直线加实心三角的生硬感
         if (showRoute && route.size >= 2) {
-            val arrow = Path().apply {
-                moveTo(9f, 0f)
-                lineTo(-9f, 6f)
-                lineTo(-4f, 0f)
-                lineTo(-9f, -6f)
-                close()
+            val chevron = Path().apply {
+                moveTo(-5f, -6f)
+                lineTo(3f, 0f)
+                lineTo(-5f, 6f)
             }
             route.zipWithNext { from, to ->
                 val a = toScreen(spotVirtual(from).x, spotVirtual(from).y)
                 val b = toScreen(spotVirtual(to).x, spotVirtual(to).y)
-                drawLine(accent, a, b, strokeWidth = 3f)
-                val mid = (a + b) / 2f
+                val dx = b.x - a.x
+                val dy = b.y - a.y
+                val len = hypot(dx, dy).takeIf { it > 0f } ?: return@zipWithNext
+
+                // 控制点：中点沿垂直方向偏移，弧线统一向下微弯，像地图上的路径
+                var nx = -dy / len
+                var ny = dx / len
+                if (ny < 0) {
+                    nx = -nx
+                    ny = -ny
+                }
+                val sag = len * 0.16f
+                val ctrl = Offset((a.x + b.x) / 2 + nx * sag, (a.y + b.y) / 2 + ny * sag)
+
+                val curve = Path().apply {
+                    moveTo(a.x, a.y)
+                    quadraticBezierTo(ctrl.x, ctrl.y, b.x, b.y)
+                }
+                drawPath(curve, color = accent, style = Stroke(width = 2.5f, cap = StrokeCap.Round))
+
+                // 箭头放在弧线顶点（t=0.5），方向沿切线（平行于端点连线）
+                val arcMid = Offset(
+                    (a.x + 2 * ctrl.x + b.x) / 4,
+                    (a.y + 2 * ctrl.y + b.y) / 4,
+                )
                 val angle = Math.toDegrees(
-                    atan2((b.y - a.y).toDouble(), (b.x - a.x).toDouble()),
+                    atan2(dy.toDouble(), dx.toDouble()),
                 ).toFloat()
                 withTransform({
-                    translate(mid.x, mid.y)
+                    translate(arcMid.x, arcMid.y)
                     rotate(angle, pivot = Offset.Zero)
                 }) {
-                    drawPath(arrow, color = accent)
+                    drawPath(chevron, color = accent, style = Stroke(width = 2.5f, cap = StrokeCap.Round))
                 }
             }
         }
