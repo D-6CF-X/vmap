@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">V-Map</string>
+
+    <string name="section_tianyi">依你随行</string>
+    <string name="section_miku">因音而遇</string>
+
+    <string name="nav_map">地图</string>
+    <string name="nav_timeline">时间线</string>
+
+    <string name="action_light_city">点亮城市</string>
+    <string name="action_switch_section">切换板块</string>
+
+    <string name="city_search_hint">搜索城市，如「上海」</string>
+    <string name="city_search_title">选择要点亮的城市</string>
+
+    <string name="spot_edit_title">演出信息</string>
+    <string name="spot_field_title">演出名称</string>
+    <string name="spot_field_venue">场馆</string>
+    <string name="spot_field_date">日期</string>
+    <string name="spot_field_note">备注</string>
+    <string name="spot_save">保存</string>
+    <string name="spot_cancel">取消</string>
+    <string name="spot_add_photo">添加照片</string>
+
+    <string name="empty_spots">还没有点亮的城市</string>
+    <string name="empty_spots_hint">点右上角「点亮城市」开始记录</string>
+
+    <string name="lit_count">已点亮 %1$d 座城市 · %2$d 场演出</string>
+</resources>

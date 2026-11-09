@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="window_bg">#0F1115</color>
+    <color name="ic_launcher_background">#0F1115</color>
+
+    <!-- 天依：应援蓝 -->
+    <color name="tianyi_blue">#66CCFF</color>
+    <color name="tianyi_blue_deep">#1E7BA8</color>
+
+    <!-- 初音：应援绿 -->
+    <color name="miku_green">#39C5BB</color>
+    <color name="miku_green_deep">#1B7A74</color>
+</resources>

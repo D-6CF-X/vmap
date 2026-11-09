@@ -1,0 +1,37 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+local.properties
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+*.hprof
+
+# 签名与密钥 —— 绝不能进仓库
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+
+# 本地配置（含高德 API Key）
+secrets.properties
+apikeys.properties
+
+# 构建产物
+*.apk
+*.aab
+*.ap_
+output-metadata.json
+*.log
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 本地测试素材，不入库
+/sample-photos/
