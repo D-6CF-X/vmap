@@ -27,6 +27,9 @@ android {
 
         manifestPlaceholders["AMAP_API_KEY"] = amapKey
 
+        // 没有 Key 时自动降级到 osmdroid，保证 clone 下来就能看到地图
+        buildConfigField("boolean", "HAS_AMAP_KEY", amapKey.isNotBlank().toString())
+
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a")
         }
@@ -54,6 +57,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
@@ -95,4 +99,6 @@ dependencies {
 
     implementation(libs.amap.map)
     implementation(libs.amap.search)
+
+    implementation(libs.osmdroid.android)
 }

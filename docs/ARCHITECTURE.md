@@ -91,6 +91,8 @@ erDiagram
 
 板块是导航层级，不是标签。用户在两个 tab 之间切换，看到的是两份独立的进度。
 
+> 当前 v0.1 只建了 `spots` 和 `photos` 两张表。`tag` / `spot_tag` 出现在上面的图里是规划，等筛选功能开工时再建，避免现在写了没人用。
+
 ```kotlin
 enum class Section { TIANYI, MIKU }
 ```
@@ -122,6 +124,40 @@ WHERE section IN (:currentSection, 'BOTH') AND deleted = 0;
 不在地图初始化时调 `DistrictSearch`。它一次只能查一个行政区，有 QPS 限制，网络不好时首屏会白屏。
 
 以后如果要做「自动记录路过的地方」（后台定位），再单独加 `visited_areas` 表。那时候「打卡」和「路过」是两种数据来源，混在一张表里会互相污染统计口径。
+
+## 地图双引擎
+
+```
+MapCanvas
+├── BuildConfig.HAS_AMAP_KEY == true  → AmapCanvas（高德 9.8.3）
+└── false                              → OsmCanvas（osmdroid 6.1.20 + OSM 瓦片）
+```
+
+为什么要两个：
+
+- **高德**体验好、国内瓦片快、中文地名全，但需要 Key，且 Key 绑定包名 + 签名。
+- **osmdroid** 不需要任何 Key，`git clone` 完直接能看地图。
+
+开源项目如果只有高德，每个想跑起来的人都得去高德注册、建应用、填包名、算 SHA1。这个门槛会挡掉大部分人。所以规则是：**有 Key 用高德，没 Key 自动降级**，`MapCanvas` 里一个 if 决定。
+
+### 两个引擎的坐标系不一样
+
+这是最容易出错的地方：
+
+| 引擎 | 瓦片坐标系 | 我们存的 |
+|---|---|---|
+| 高德 | GCJ-02 | GCJ-02 |
+| OSM | **WGS-84** | GCJ-02 |
+
+所以 `OsmCanvas` 里每个点画上去之前必须 `point.asWgs84()` 转一次。没转的话整张图上的点会统一偏 300~500 米，而且看起来「差不多对」特别难发现。
+
+这也是当初把坐标系做成类型而不是裸 `Double` 的直接回报：转换只有一个入口，加第二个引擎时不用满地找。
+
+### 共用部分
+
+- `MapIcons.cityDotBitmap` / `arrowBitmap` 返回 `Bitmap`，两个引擎各自包成 `BitmapDescriptor` 或 `BitmapDrawable`。
+- `MapIcons.bearing` 收裸 double，不绑任何 SDK 类型。
+- 路线箭头都是**预先旋转位图**，不用 marker 的旋转属性（高德 9.x 没有可写的 `rotate`）。
 
 ## 同步预留
 

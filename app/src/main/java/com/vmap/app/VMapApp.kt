@@ -5,6 +5,7 @@ import android.content.Context
 import com.amap.api.maps.MapsInitializer
 import com.amap.api.services.core.ServiceSettings
 import com.vmap.app.core.db.VMapDatabase
+import com.vmap.app.core.map.OsmdroidSetup
 import com.vmap.app.data.photo.PhotoStore
 import com.vmap.app.data.repository.SpotRepositoryImpl
 import com.vmap.app.domain.repository.SpotRepository
@@ -22,6 +23,9 @@ class VMapApp : Application() {
         MapsInitializer.updatePrivacyAgree(this, true)
         ServiceSettings.updatePrivacyShow(this, true, true)
         ServiceSettings.updatePrivacyAgree(this, true)
+
+        // osmdroid 的瓦片缓存路径必须显式指定，Android 10 之后默认路径不可写
+        OsmdroidSetup.init(this)
 
         container = AppContainer(this)
     }

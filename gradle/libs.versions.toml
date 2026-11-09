@@ -11,6 +11,7 @@ room = "2.6.1"
 coil = "2.7.0"
 amapMap = "9.8.3"
 amapSearch = "9.7.1"
+osmdroid = "6.1.20"
 coroutines = "1.9.0"
 
 [libraries]
@@ -37,6 +38,8 @@ coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coi
 
 amap-map = { group = "com.amap.api", name = "3dmap", version.ref = "amapMap" }
 amap-search = { group = "com.amap.api", name = "search", version.ref = "amapSearch" }
+
+osmdroid-android = { group = "org.osmdroid", name = "osmdroid-android", version.ref = "osmdroid" }
 
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 

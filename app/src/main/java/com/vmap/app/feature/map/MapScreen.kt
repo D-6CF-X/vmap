@@ -45,6 +45,7 @@ import com.amap.api.maps.model.LatLng
 import com.amap.api.maps.model.LatLngBounds
 import com.amap.api.maps.model.MarkerOptions
 import com.amap.api.maps.model.PolylineOptions
+import com.vmap.app.BuildConfig
 import com.vmap.app.core.ui.MapIcons
 import com.vmap.app.core.ui.accent
 import com.vmap.app.domain.model.Section
@@ -196,8 +197,43 @@ private fun SectionChip(
     }
 }
 
+/**
+ * 地图入口。有高德 Key 用高德，没有就降级到 osmdroid。
+ *
+ * 这么做的原因很实际：项目开源后，别人 clone 下来不会为了看一眼地图去申请 Key。
+ * Key 为空时自动切到 osmdroid，地图照样能显示，只是数据源从高德换成 OSM。
+ */
 @Composable
 private fun MapCanvas(
+    modifier: Modifier,
+    spots: List<Spot>,
+    route: List<Spot>,
+    section: Section,
+    showRoute: Boolean,
+    onSpotClick: (Spot) -> Unit,
+) {
+    if (BuildConfig.HAS_AMAP_KEY) {
+        AmapCanvas(
+            modifier = modifier,
+            spots = spots,
+            route = route,
+            section = section,
+            showRoute = showRoute,
+            onSpotClick = onSpotClick,
+        )
+    } else {
+        OsmCanvas(
+            modifier = modifier,
+            spots = spots,
+            route = route,
+            section = section,
+            showRoute = showRoute,
+        )
+    }
+}
+
+@Composable
+private fun AmapCanvas(
     modifier: Modifier,
     spots: List<Spot>,
     route: List<Spot>,
@@ -305,7 +341,7 @@ private fun redraw(
         route.zipWithNext { from, to ->
             val a = LatLng(from.lat, from.lng)
             val b = LatLng(to.lat, to.lng)
-            val angle = MapIcons.bearing(a, b)
+            val angle = MapIcons.bearing(a.latitude, a.longitude, b.latitude, b.longitude)
             map.addMarker(
                 MarkerOptions()
                     .position(LatLng((a.latitude + b.latitude) / 2, (a.longitude + b.longitude) / 2))
