@@ -6,20 +6,24 @@ import androidx.compose.ui.graphics.Path
 import org.json.JSONObject
 
 /**
- * 一个省级行政区的形状。坐标已换算成虚拟坐标系：
+ * 一个城市的形状。坐标已换算成虚拟坐标系：
  * x = (lng - 73) / 62 * 1000，y = (54 - lat) / 36 * 580。
- * 渲染时再按画布尺寸整体缩放，这样 Path 只需要构建一次。
+ * [rings] 是原始坐标点（用于点选判定），[path] 用于渲染，[center] 是外接框中心（用于放城市名）。
  */
 class ProvinceShape(
     val adcode: String,
     val name: String,
-    val paths: List<Path>,
-)
+    val rings: List<List<Offset>>,
+    val path: Path,
+    val center: Offset,
+) {
+    fun contains(x: Float, y: Float): Boolean =
+        rings.any { ring -> pointInPolygon(ring, x, y) }
+}
 
 /**
- * 中国省级边界，来自阿里 DataV 的行政区划数据（简化到 3 位小数，约 400KB）。
- * 加载一次缓存复用；纯 Canvas 绘制，不依赖任何地图 SDK，也就没有
- * 瓦片加载、坐标系漂移和 16KB 页兼容这些问题。
+ * 中国地级市边界，来自阿里 DataV（简化到 3 位小数，370 城约 2.4MB）。
+ * 纯 Canvas 绘制，无地图 SDK 依赖。加载一次缓存复用。
  */
 object ChinaMapData {
 
@@ -49,42 +53,88 @@ object ChinaMapData {
             val result = ArrayList<ProvinceShape>(features.length())
             for (i in 0 until features.length()) {
                 val f = features.getJSONObject(i)
-                val polygonsRaw = when (val type = f.getString("type")) {
-                    "Polygon" -> listOf(f.getJSONArray("coords"))
+                val type = f.getString("type")
+
+                // 收集所有环（外环 + 内环），Path 用全部环（even-odd 自动处理洞）
+                val rings = ArrayList<List<Offset>>()
+                when (type) {
+                    "Polygon" -> collectRings(f.getJSONArray("coords"), rings)
                     "MultiPolygon" -> {
                         val arr = f.getJSONArray("coords")
-                        (0 until arr.length()).map { arr.getJSONArray(it) }
-                    }
-                    else -> {
-                        // 未知几何类型，宁可跳过也不能崩
-                        continue
-                    }
-                }
-                val paths = polygonsRaw.mapNotNull { poly ->
-                    try {
-                        val path = Path()
-                        val rings = if (poly is org.json.JSONArray) poly else return@mapNotNull null
-                        for (r in 0 until rings.length()) {
-                            val ring = rings.getJSONArray(r)
-                            for (j in 0 until ring.length()) {
-                                val pt = ring.getJSONArray(j)
-                                val x = lngToX(pt.getDouble(0))
-                                val y = latToY(pt.getDouble(1))
-                                if (j == 0) path.moveTo(x, y) else path.lineTo(x, y)
-                            }
-                            path.close()
+                        for (p in 0 until arr.length()) {
+                            collectRings(arr.getJSONArray(p), rings)
                         }
-                        path
-                    } catch (e: Exception) {
-                        null
+                    }
+                    else -> continue
+                }
+
+                if (rings.isEmpty()) continue
+
+                val path = Path()
+                rings.forEach { ring ->
+                    ring.forEachIndexed { j, pt ->
+                        if (j == 0) path.moveTo(pt.x, pt.y) else path.lineTo(pt.x, pt.y)
+                    }
+                    path.close()
+                }
+
+                // 外接框中心（城市名位置）
+                var minX = Float.MAX_VALUE
+                var minY = Float.MAX_VALUE
+                var maxX = -Float.MAX_VALUE
+                var maxY = -Float.MAX_VALUE
+                rings.forEach { ring ->
+                    ring.forEach { pt ->
+                        if (pt.x < minX) minX = pt.x
+                        if (pt.y < minY) minY = pt.y
+                        if (pt.x > maxX) maxX = pt.x
+                        if (pt.y > maxY) maxY = pt.y
                     }
                 }
-                if (paths.isNotEmpty()) {
-                    result.add(ProvinceShape(f.getString("adcode"), f.getString("name"), paths))
-                }
+
+                result.add(
+                    ProvinceShape(
+                        adcode = f.getString("adcode"),
+                        name = f.getString("name"),
+                        rings = rings,
+                        path = path,
+                        center = Offset((minX + maxX) / 2, (minY + maxY) / 2),
+                    )
+                )
             }
             cached = result
             return result
         }
     }
+
+    private fun collectRings(coords: org.json.JSONArray, out: ArrayList<List<Offset>>) {
+        for (r in 0 until coords.length()) {
+            val ring = coords.getJSONArray(r)
+            val points = ArrayList<Offset>(ring.length())
+            for (j in 0 until ring.length()) {
+                val pt = ring.getJSONArray(j)
+                points.add(Offset(lngToX(pt.getDouble(0)), latToY(pt.getDouble(1))))
+            }
+            if (points.isNotEmpty()) out.add(points)
+        }
+    }
+}
+
+/** 射线法判定点是否在多边形内。 */
+private fun pointInPolygon(poly: List<Offset>, x: Float, y: Float): Boolean {
+    var inside = false
+    var j = poly.size - 1
+    for (i in poly.indices) {
+        val xi = poly[i].x
+        val yi = poly[i].y
+        val xj = poly[j].x
+        val yj = poly[j].y
+        if ((yi > y) != (yj > y) &&
+            x < (xj - xi) * (y - yi) / (yj - yi) + xi
+        ) {
+            inside = !inside
+        }
+        j = i
+    }
+    return inside
 }

@@ -40,6 +40,7 @@ import com.vmap.app.feature.spot.SpotEditSheet
 fun MapScreen(
     viewModel: MapViewModel,
     onLightCity: () -> Unit,
+    dimmed: Boolean = false,
 ) {
     val section by viewModel.section.collectAsStateWithLifecycle()
     val spots by viewModel.spots.collectAsStateWithLifecycle()
@@ -57,6 +58,8 @@ fun MapScreen(
             section = section,
             showRoute = showRoute,
             onSpotClick = { detailSpot = it },
+            // 有弹窗盖着时冻结动画，避免后台地图每帧重绘拖慢对话框
+            animated = detailSpot == null && !dimmed,
         )
 
         Column(

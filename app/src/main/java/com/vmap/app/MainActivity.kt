@@ -77,6 +77,7 @@ private fun VMapRoot() {
             Tab.MAP -> MapScreen(
                 viewModel = viewModel,
                 onLightCity = { showLightSheet = true },
+                dimmed = showLightSheet,
             )
 
             Tab.TIMELINE -> TimelineScreen(
