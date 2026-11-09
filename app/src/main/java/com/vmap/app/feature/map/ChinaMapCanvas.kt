@@ -24,9 +24,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.sp
 import com.vmap.app.core.map.ChinaMapData
 import com.vmap.app.core.ui.accent
@@ -81,6 +83,19 @@ fun ChinaMapCanvas(
     )
 
     val labelStyle = TextStyle(color = LabelColor, fontSize = 13.sp)
+
+    // 城市名只测一次并缓存。关键：drawText 默认会用「画布宽度 - 文字起始 x」当最大宽度，
+    // 地图放大后城市点坐标可能超出屏幕，这个差值变成负数直接抛异常，
+    // 所以这里用固定宽度预测量，绘制时走 layout 重载，绕开 size-aware 的约束计算。
+    val labelLayouts = remember(spots, labelStyle) {
+        spots.associate { spot ->
+            spot.id to textMeasurer.measure(
+                text = AnnotatedString(spot.cityName),
+                style = labelStyle,
+                constraints = Constraints(maxWidth = 1000),
+            )
+        }
+    }
 
     fun spotVirtual(spot: Spot): Offset = Offset(
         ChinaMapData.lngToX(spot.point.asWgs84().lng),
@@ -191,6 +206,14 @@ fun ChinaMapCanvas(
         // 城市点：投影 + 呼吸光晕 + 高光，制造立体感
         spots.forEachIndexed { index, spot ->
             val pos = toScreen(spotVirtual(spot).x, spotVirtual(spot).y)
+
+            // 屏幕外跳过，避免大量不可见绘制，也防止文字约束计算出负值
+            if (pos.x < -300f || pos.x > size.width + 300f ||
+                pos.y < -300f || pos.y > size.height + 300f
+            ) {
+                return@forEachIndexed
+            }
+
             val pulse = (flow + index.toFloat() / (spots.size.coerceAtLeast(1))) % 1f
 
             // 投影
@@ -207,12 +230,9 @@ fun ChinaMapCanvas(
             // 左上高光，模拟球面反光
             drawCircle(Color.White.copy(alpha = 0.75f), radius = 3f, center = pos + Offset(-3f, -3f))
             // 城市名
-            drawText(
-                textMeasurer = textMeasurer,
-                text = spot.cityName,
-                topLeft = pos + Offset(16f, -12f),
-                style = labelStyle,
-            )
+            labelLayouts[spot.id]?.let { layout ->
+                drawText(layout, topLeft = pos + Offset(16f, -12f))
+            }
         }
     }
 }
