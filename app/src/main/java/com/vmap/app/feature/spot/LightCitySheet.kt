@@ -39,9 +39,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.os.Build
 import com.vmap.app.VMapApp
+import com.vmap.app.core.geo.GeoPoint
+import com.vmap.app.core.geo.Srid
 import com.vmap.app.core.ui.accent
+import com.vmap.app.data.city.BuiltinCitySearcher
 import com.vmap.app.data.city.CityHit
+import com.vmap.app.data.city.CitySearchProvider
 import com.vmap.app.data.city.CitySearcher
 import com.vmap.app.domain.model.Section
 import com.vmap.app.domain.model.Spot
@@ -61,7 +66,10 @@ fun LightCitySheet(
     val app = context.applicationContext as VMapApp
     val scope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val searcher = remember { CitySearcher(context) }
+    val searcher: CitySearchProvider = remember {
+        // Android 16 上高德 search SDK 的 so 不兼容，改用内置列表
+        if (Build.VERSION.SDK_INT < 36) CitySearcher(context) else BuiltinCitySearcher()
+    }
     val accent = section.accent
 
     var keyword by remember { mutableStateOf("") }
@@ -180,14 +188,16 @@ fun LightCitySheet(
                     onClick = {
                         if (title.isBlank()) return@Button
                         scope.launch {
+                            // CityHit 是 WGS84，入库统一 GCJ02
+                            val gcj = GeoPoint(city.lat, city.lng, Srid.WGS84).asGcj02()
                             app.container.spotRepository.save(
                                 Spot(
                                     section = section,
                                     adcode = city.adcode,
                                     cityName = city.name,
                                     provinceName = city.parent,
-                                    lat = city.lat,
-                                    lng = city.lng,
+                                    lat = gcj.lat,
+                                    lng = gcj.lng,
                                     title = title.trim(),
                                     venue = venue.trim(),
                                     performedAt = performedAt,

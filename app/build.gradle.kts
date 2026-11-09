@@ -14,6 +14,9 @@ val amapKey: String = System.getenv("AMAP_API_KEY")
         ?.trim()
     ?: ""
 
+// ./gradlew assembleDebug -PforceOsm=true 可强制走 osmdroid，用于验证兜底引擎
+val forceOsm: Boolean = providers.gradleProperty("forceOsm").orNull == "true"
+
 android {
     namespace = "com.vmap.app"
     compileSdk = 35
@@ -29,6 +32,7 @@ android {
 
         // 没有 Key 时自动降级到 osmdroid，保证 clone 下来就能看到地图
         buildConfigField("boolean", "HAS_AMAP_KEY", amapKey.isNotBlank().toString())
+        buildConfigField("boolean", "FORCE_OSM", forceOsm.toString())
 
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a")

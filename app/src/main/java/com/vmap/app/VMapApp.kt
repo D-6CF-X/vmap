@@ -2,6 +2,7 @@ package com.vmap.app
 
 import android.app.Application
 import android.content.Context
+import android.os.Build
 import com.amap.api.maps.MapsInitializer
 import com.amap.api.services.core.ServiceSettings
 import com.vmap.app.core.db.VMapDatabase
@@ -19,10 +20,13 @@ class VMapApp : Application() {
         super.onCreate()
 
         // 高德 SDK 隐私合规。这两个接口不调，地图只会显示灰底，看不出是没配 key 还是没声明。
-        MapsInitializer.updatePrivacyShow(this, true, true)
-        MapsInitializer.updatePrivacyAgree(this, true)
-        ServiceSettings.updatePrivacyShow(this, true, true)
-        ServiceSettings.updatePrivacyAgree(this, true)
+        // Android 16 上高德 native 库不兼容，整个跳过，避免任何 so 加载。
+        if (Build.VERSION.SDK_INT < 36) {
+            MapsInitializer.updatePrivacyShow(this, true, true)
+            MapsInitializer.updatePrivacyAgree(this, true)
+            ServiceSettings.updatePrivacyShow(this, true, true)
+            ServiceSettings.updatePrivacyAgree(this, true)
+        }
 
         // osmdroid 的瓦片缓存路径必须显式指定，Android 10 之后默认路径不可写
         OsmdroidSetup.init(this)

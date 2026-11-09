@@ -13,12 +13,33 @@ import com.vmap.app.core.ui.MapIcons
 import com.vmap.app.core.ui.accent
 import com.vmap.app.domain.model.Section
 import com.vmap.app.domain.model.Spot
+import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
+import org.osmdroid.util.MapTileIndex
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
+
+/**
+ * ESRI 暗灰底图。免费匿名、全球 CDN（国内可达）、自带暗色主题。
+ *
+ * 坑：ESRI 的 URL 是 tile/{z}/{y}/{x}，y 在 x 前面；osmdroid 默认拼 {z}/{x}/{y}，
+ * 直接用 XYTileSource 会拿到 404，所以必须重写拼装顺序。
+ */
+private val esriDark = object : OnlineTileSourceBase(
+    "EsriDarkGray", 0, 19, 256, ".png",
+    arrayOf("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/"),
+) {
+    override fun getTileURLString(pMapTileIndex: Long): String {
+        val z = MapTileIndex.getZoom(pMapTileIndex)
+        val x = MapTileIndex.getX(pMapTileIndex)
+        val y = MapTileIndex.getY(pMapTileIndex)
+        return baseUrl + z + "/" + y + "/" + x + mImageFilenameEnding
+    }
+}
 
 /**
  * osmdroid 版地图。没有 API Key 时的兜底，任何人 clone 下来都能看到地图。
@@ -37,7 +58,7 @@ fun OsmCanvas(
     val context = LocalContext.current
     val mapView = remember {
         MapView(context).apply {
-            setTileSource(TileSourceFactory.MAPNIK)
+            setTileSource(esriDark)
             setMultiTouchControls(true)
             setBuiltInZoomControls(false)
             controller.setZoom(4.0)

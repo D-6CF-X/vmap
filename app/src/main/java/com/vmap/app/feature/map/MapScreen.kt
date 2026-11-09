@@ -1,6 +1,7 @@
 package com.vmap.app.feature.map
 
 import android.content.Context
+import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -98,7 +99,7 @@ fun MapScreen(
             contentColor = Color(0xFF06151B),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(20.dp),
+                .padding(end = 20.dp, bottom = 108.dp),
             icon = { Icon(Icons.Filled.Add, contentDescription = null) },
             text = { Text("点亮城市", fontWeight = FontWeight.Medium) },
         )
@@ -200,8 +201,11 @@ private fun SectionChip(
 /**
  * 地图入口。有高德 Key 用高德，没有就降级到 osmdroid。
  *
- * 这么做的原因很实际：项目开源后，别人 clone 下来不会为了看一眼地图去申请 Key。
- * Key 为空时自动切到 osmdroid，地图照样能显示，只是数据源从高德换成 OSM。
+ * 关键：Android 16 及以上强制走 osmdroid。高德 SDK 的 native 库（libAMapSDK_MAP_*.so）
+ * 至今仍是 4KB 页对齐，没有发布 16KB 对齐版本，在 16KB 内存页的设备上加载 so 直接崩溃。
+ * osmdroid 是纯 Java 实现，没有 so，所以是 Android 16 上唯一能跑的选择。
+ *
+ * 这个判断用 SDK_INT < 36 而不是运行时试加载，因为 native 崩溃是进程级致命错误，捕获不了。
  */
 @Composable
 private fun MapCanvas(
@@ -212,7 +216,8 @@ private fun MapCanvas(
     showRoute: Boolean,
     onSpotClick: (Spot) -> Unit,
 ) {
-    if (BuildConfig.HAS_AMAP_KEY) {
+    val useAmap = BuildConfig.HAS_AMAP_KEY && !BuildConfig.FORCE_OSM && Build.VERSION.SDK_INT < 36
+    if (useAmap) {
         AmapCanvas(
             modifier = modifier,
             spots = spots,
