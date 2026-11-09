@@ -1,9 +1,11 @@
 package com.vmap.app.feature.spot
 
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,21 +13,31 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,6 +73,14 @@ fun SpotEditSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val accent = spot.section.accent
 
+    var editing by remember { mutableStateOf(false) }
+    var title by remember(spot) { mutableStateOf(spot.title) }
+    var venue by remember(spot) { mutableStateOf(spot.venue) }
+    var note by remember(spot) { mutableStateOf(spot.note) }
+    var performedAt by remember(spot) { mutableStateOf(spot.performedAt) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var importing by remember { mutableStateOf(false) }
+
     val photos by app.container.spotRepository
         .observePhotos(spot.id)
         .collectAsStateWithLifecycle(initialValue = emptyList())
@@ -70,11 +90,25 @@ fun SpotEditSheet(
     ) { uris ->
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
         scope.launch {
-            uris.forEach { uri ->
-                app.container.photoStore.import(uri, spot.id)?.let { photo ->
+            importing = true
+            var ok = 0
+            var fail = 0
+            for (uri in uris) {
+                val photo = app.container.photoStore.import(uri, spot.id)
+                if (photo != null) {
                     app.container.spotRepository.addPhoto(photo)
+                    ok++
+                } else {
+                    fail++
                 }
             }
+            importing = false
+            val msg = when {
+                ok > 0 && fail > 0 -> "已添加 $ok 张照片，$fail 张失败"
+                ok > 0 -> "已添加 $ok 张照片"
+                else -> "照片添加失败"
+            }
+            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -102,39 +136,79 @@ fun SpotEditSheet(
                 )
                 Text(
                     text = SimpleDateFormat("yyyy.MM.dd", Locale.getDefault())
-                        .format(Date(spot.performedAt)),
+                        .format(Date(performedAt)),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp,
                 )
             }
 
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = spot.title,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 15.sp,
-            )
+            Spacer(Modifier.height(14.dp))
 
-            if (spot.venue.isNotBlank()) {
-                Text(
-                    text = spot.venue,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 13.sp,
+            if (editing) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("演出名称") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
                 )
-            }
-
-            if (spot.note.isNotBlank()) {
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    text = spot.note,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 13.sp,
+                OutlinedTextField(
+                    value = venue,
+                    onValueChange = { venue = it },
+                    label = { Text("场馆") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
                 )
+                Spacer(Modifier.height(8.dp))
+                Surface(
+                    onClick = { showDatePicker = true },
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = "日期 · " +
+                            SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(performedAt)),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(14.dp),
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text("备注") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                Text(
+                    text = title,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+                if (venue.isNotBlank()) {
+                    Text(
+                        text = venue,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
+                    )
+                }
+                if (note.isNotBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = note,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
+                    )
+                }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(14.dp))
 
-            if (photos.isEmpty()) {
+            if (photos.isEmpty() && !importing) {
                 Text(
                     text = "还没有照片",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -157,6 +231,13 @@ fun SpotEditSheet(
                                 .clip(RoundedCornerShape(8.dp)),
                         )
                     }
+                    if (importing) {
+                        item {
+                            Box(modifier = Modifier.aspectRatio(1f), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = accent, modifier = Modifier.height(28.dp).width(28.dp))
+                            }
+                        }
+                    }
                 }
             }
 
@@ -168,6 +249,7 @@ fun SpotEditSheet(
                         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                     )
                 },
+                enabled = !importing,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = accent.copy(alpha = 0.18f),
                     contentColor = accent,
@@ -177,17 +259,59 @@ fun SpotEditSheet(
                 Text("添加照片")
             }
 
-            TextButton(
-                onClick = {
-                    scope.launch {
-                        viewModel.delete(spot.id)
-                        onDeleted()
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("删除这次打卡", color = Color(0xFFE24B4A), fontSize = 13.sp)
+            Row(modifier = Modifier.fillMaxWidth()) {
+                TextButton(
+                    onClick = {
+                        if (editing) {
+                            scope.launch {
+                                app.container.spotRepository.save(
+                                    spot.copy(
+                                        title = title.trim(),
+                                        venue = venue.trim(),
+                                        note = note.trim(),
+                                        performedAt = performedAt,
+                                    )
+                                )
+                                editing = false
+                            }
+                        } else {
+                            editing = true
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(if (editing) "保存" else "编辑", color = accent)
+                }
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            viewModel.delete(spot.id)
+                            onDeleted()
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("删除", color = Color(0xFFE24B4A))
+                }
             }
+        }
+    }
+
+    if (showDatePicker) {
+        val dateState = rememberDatePickerState(initialSelectedDateMillis = performedAt)
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    dateState.selectedDateMillis?.let { performedAt = it }
+                    showDatePicker = false
+                }) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("取消") }
+            },
+        ) {
+            DatePicker(state = dateState)
         }
     }
 }

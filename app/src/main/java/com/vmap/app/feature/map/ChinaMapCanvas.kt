@@ -63,8 +63,8 @@ fun ChinaMapCanvas(
     val textMeasurer = rememberTextMeasurer()
     val accent = section.accent
 
-    val visitedPrefixes = remember(spots) {
-        spots.map { it.adcode.take(2) }.toSet()
+    val visitedAdcodes = remember(spots) {
+        spots.map { it.adcode }.toSet()
     }
 
     var scale by remember { mutableFloatStateOf(1f) }
@@ -105,9 +105,24 @@ fun ChinaMapCanvas(
     Canvas(
         modifier = modifier
             .pointerInput(Unit) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    scale = (scale * zoom).coerceIn(1f, 10f)
+                detectTransformGestures { centroid, pan, zoom, _ ->
+                    val newScale = (scale * zoom).coerceIn(1f, 10f)
+                    val base = min(
+                        size.width / ChinaMapData.VW,
+                        size.height / ChinaMapData.VH,
+                    )
+                    val cx = (size.width - ChinaMapData.VW * base) / 2
+                    val cy = (size.height - ChinaMapData.VH * base) / 2
+                    // 围绕双指中心缩放，否则会一直朝左上角缩
+                    val ratio = newScale / scale
+                    if (ratio != 1f) {
+                        offset = Offset(
+                            centroid.x - cx - (centroid.x - cx - offset.x) * ratio,
+                            centroid.y - cy - (centroid.y - cy - offset.y) * ratio,
+                        )
+                    }
                     offset += pan
+                    scale = newScale
                 }
             }
             .pointerInput(spots, scale, offset) {
@@ -140,7 +155,7 @@ fun ChinaMapCanvas(
 
         // 省份：点亮填应援色，未点亮填表面色
         provinces.forEach { p ->
-            val visited = visitedPrefixes.contains(p.adcode.take(2))
+            val visited = visitedAdcodes.contains(p.adcode)
             val fill = if (visited) accent else UnlitProvince
             p.paths.forEach { path ->
                 withTransform({
@@ -189,17 +204,17 @@ fun ChinaMapCanvas(
                     drawLine(accent.copy(alpha = alpha), p0, p1, strokeWidth = width, cap = StrokeCap.Round)
                 }
 
-                // 飞行光点沿抛物线滑动，带拖尾
+                // 飞行光点沿抛物线滑动，带短拖尾
                 val t = flow
                 val pos = quadPoint(a, ctrl, b, t)
-                for (k in 1..5) {
-                    val tt = (t - k * 0.035f).coerceIn(0f, 1f)
+                for (k in 1..3) {
+                    val tt = (t - k * 0.04f).coerceIn(0f, 1f)
                     val tail = quadPoint(a, ctrl, b, tt)
-                    val fade = (1f - k * 0.18f).coerceAtLeast(0f)
-                    drawCircle(accent.copy(alpha = 0.45f * fade), radius = 5f * (1f - k * 0.16f), center = tail)
+                    val fade = (1f - k * 0.25f).coerceAtLeast(0f)
+                    drawCircle(accent.copy(alpha = 0.4f * fade), radius = 4f * (1f - k * 0.2f), center = tail)
                 }
-                drawCircle(accent.copy(alpha = 0.30f), radius = 10f, center = pos)
-                drawCircle(Color.White.copy(alpha = 0.95f), radius = 4f, center = pos)
+                drawCircle(accent.copy(alpha = 0.22f), radius = 9f, center = pos)
+                drawCircle(Color.White.copy(alpha = 0.95f), radius = 3.5f, center = pos)
             }
         }
 
@@ -216,22 +231,20 @@ fun ChinaMapCanvas(
 
             val pulse = (flow + index.toFloat() / (spots.size.coerceAtLeast(1))) % 1f
 
-            // 投影
-            drawCircle(ShadowColor, radius = 13f, center = pos + Offset(0f, 4f))
-            // 呼吸光晕（放大淡出）
+            // 柔和投影
+            drawCircle(ShadowColor, radius = 11f, center = pos + Offset(0f, 3f))
+            // 呼吸光晕（克制）
             drawCircle(
-                accent.copy(alpha = 0.35f * (1f - pulse)),
-                radius = 12f + 10f * pulse,
+                accent.copy(alpha = 0.22f * (1f - pulse)),
+                radius = 10f + 7f * pulse,
                 center = pos,
             )
             // 主体
-            drawCircle(Color.White, radius = 12f, center = pos)
-            drawCircle(accent, radius = 9f, center = pos)
-            // 左上高光，模拟球面反光
-            drawCircle(Color.White.copy(alpha = 0.75f), radius = 3f, center = pos + Offset(-3f, -3f))
+            drawCircle(Color.White, radius = 10f, center = pos)
+            drawCircle(accent, radius = 7.5f, center = pos)
             // 城市名
             labelLayouts[spot.id]?.let { layout ->
-                drawText(layout, topLeft = pos + Offset(16f, -12f))
+                drawText(layout, topLeft = pos + Offset(14f, -11f))
             }
         }
     }
