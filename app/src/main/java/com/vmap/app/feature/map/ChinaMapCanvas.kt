@@ -266,7 +266,7 @@ fun ChinaMapCanvas(
         // 文字避让：已占用的屏幕矩形，重叠的名字跳过（学高德的标注避让）
         val occupied = ArrayList<Rect>()
 
-        /** 按顺序尝试几个位置，返回是否放成功。点亮城市名（emboss）放宽约束：地块太小也优先显示。 */
+        /** 放不下就放弃——宁可少一个名字，也不让标注叠成一坨。 */
         fun tryPlace(
             layout: TextLayoutResult,
             labelV: Offset,
@@ -281,39 +281,24 @@ fun ChinaMapCanvas(
             val th = layout.size.height.toFloat()
             val c = toScreen(labelV.x, labelV.y)
 
-            // 候选位置：地块内居中（严格）→ 点位上方 → 点位下方 → 点位居中
-            val candidates = ArrayList<Offset>(4)
-            val tl = toScreen(bbox.left, bbox.top)
-            val br = toScreen(bbox.right, bbox.bottom)
-            val fits = br.x - tl.x >= tw * minRatio && br.y - tl.y >= th * 1.6f
-            if (fits) {
-                candidates.add(
-                    Offset(
-                        (c.x - tw / 2f).coerceIn(tl.x, (br.x - tw).coerceAtLeast(tl.x)),
-                        (c.y - th / 2f).coerceIn(tl.y, (br.y - th).coerceAtLeast(tl.y)),
-                    ),
-                )
+            val x: Float
+            val y: Float
+            if (emboss != null) {
+                // 点亮城市名只用质心一个位置：允许轻微溢出地块（小地块也认得出是哪个市），
+                // 但绝不换位置硬塞，撞上别的标注整条不画。
+                x = (c.x - tw / 2f).coerceIn(6f, (size.width - tw - 6f).coerceAtLeast(6f))
+                y = (c.y - th / 2f).coerceIn(6f, (size.height - th - 6f).coerceAtLeast(6f))
+            } else {
+                val tl = toScreen(bbox.left, bbox.top)
+                val br = toScreen(bbox.right, bbox.bottom)
+                if (br.x - tl.x < tw * minRatio || br.y - tl.y < th * 1.8f) return false
+                x = (c.x - tw / 2f).coerceIn(tl.x, (br.x - tw).coerceAtLeast(tl.x))
+                y = (c.y - th / 2f).coerceIn(tl.y, (br.y - th).coerceAtLeast(tl.y))
             }
-            if (!fits || emboss != null) {
-                candidates.add(Offset(c.x - tw / 2f, c.y - th - 9f))
-                candidates.add(Offset(c.x - tw / 2f, c.y + 12f))
-                candidates.add(Offset(c.x - tw / 2f, c.y - th / 2f))
-            }
-
-            var placed: Offset? = null
-            for (p in candidates) {
-                val x = p.x.coerceIn(6f, (size.width - tw - 6f).coerceAtLeast(6f))
-                val y = p.y.coerceIn(6f, (size.height - th - 6f).coerceAtLeast(6f))
-                val rect = Rect(x - 2f, y - 2f, x + tw + 2f, y + th + 2f)
-                if (occupied.none { it.overlaps(rect) }) {
-                    occupied.add(rect)
-                    placed = Offset(x, y)
-                    break
-                }
-            }
-            val spot = placed ?: return false
-            val x = spot.x
-            val y = spot.y
+            val pad = if (emboss != null) 2f else 7f
+            val rect = Rect(x - pad, y - pad, x + tw + pad, y + th + pad)
+            if (occupied.any { it.overlaps(rect) }) return false
+            occupied.add(rect)
 
             if (emboss != null) {
                 // 立体招牌字：外发光 → 挤出厚度（向下堆叠）→ 渐变字面 → 顶部高光
@@ -373,7 +358,7 @@ fun ChinaMapCanvas(
             .sortedByDescending { it.bounds.width * it.bounds.height }
             .forEach { p ->
                 val layout = litLabelLayouts[p.adcode] ?: return@forEach
-                tryPlace(layout, p.label, accent, p.bounds, 0.92f, emboss = litEmboss)
+                tryPlace(layout, p.label, accent, p.bounds, 1f, emboss = litEmboss)
             }
 
         if (scale < DETAIL_ZOOM) {
@@ -382,14 +367,18 @@ fun ChinaMapCanvas(
                 .forEach { label ->
                     val layout = provinceLayouts[label.name] ?: return@forEach
                     val bbox = provinceBBoxes[label.adcode] ?: return@forEach
-                    tryPlace(layout, Offset(label.x, label.y), palette.label, bbox, 1.05f, shadow = plainShadow)
+                    tryPlace(layout, Offset(label.x, label.y), palette.label, bbox, 1.2f, shadow = plainShadow)
                 }
         } else {
+            // 放大态的城市名限量显示：按面积排重要度，只画前 N 个，放得越大画得越多。
+            // 全画出来会糊成一片，学高德宁缺毋滥。
+            val limit = (20 + (scale - DETAIL_ZOOM) * 12f).toInt().coerceIn(20, 70)
             provinces.filter { !visitedAdcodes.contains(it.adcode) }
                 .sortedByDescending { it.bounds.width * it.bounds.height }
+                .take(limit)
                 .forEach { p ->
                     val layout = labelLayouts[p.adcode] ?: return@forEach
-                    tryPlace(layout, p.label, palette.label.copy(alpha = 0.7f), p.bounds, 1.45f, shadow = plainShadow)
+                    tryPlace(layout, p.label, palette.label.copy(alpha = 0.55f), p.bounds, 1.7f, shadow = plainShadow)
                 }
         }
 
@@ -439,38 +428,7 @@ fun ChinaMapCanvas(
             }
         }
 
-        // 点亮城市的地标点：投影 + 呼吸光晕
-        spots.forEachIndexed { index, spot ->
-            val pos = toScreen(spotVirtual(spot).x, spotVirtual(spot).y)
-
-            if (pos.x < -300f || pos.x > size.width + 300f ||
-                pos.y < -300f || pos.y > size.height + 300f
-            ) {
-                return@forEachIndexed
-            }
-
-            val pulse = (flow + index.toFloat() / (spots.size.coerceAtLeast(1))) % 1f
-
-            // 城市底部柔光：地块小的时候也能看出这里被点亮
-            drawCircle(
-                brush = Brush.radialGradient(
-                    0f to accent.copy(alpha = 0.30f),
-                    1f to Color.Transparent,
-                    center = pos,
-                    radius = 30f,
-                ),
-                radius = 30f,
-                center = pos,
-            )
-            drawCircle(palette.shadow, radius = 11f, center = pos + Offset(0f, 3f))
-            drawCircle(
-                accent.copy(alpha = 0.22f * (1f - pulse)),
-                radius = 10f + 7f * pulse,
-                center = pos,
-            )
-            drawCircle(Color.White, radius = 10f, center = pos)
-            drawCircle(accent, radius = 7.5f, center = pos)
-        }
+        // 点亮城市不再画圆点：靠地块填色 + 立体城市名表达，点位留给路线端点
     }
 }
 

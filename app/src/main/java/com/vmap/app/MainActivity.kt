@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,10 +24,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
@@ -123,7 +120,7 @@ private fun VMapRoot() {
 
         ModalNavigationDrawer(
             drawerState = drawerState,
-            scrimColor = Color.Black.copy(alpha = if (isDark) 0.42f else 0.26f),
+            scrimColor = Color.Black.copy(alpha = if (isDark) 0.58f else 0.34f),
             drawerContent = {
                 VMapDrawer(
                     section = section,
@@ -224,11 +221,10 @@ private fun VMapDrawer(
     onClose: () -> Unit,
 ) {
     val accent = section.accent
-    val shape = RoundedCornerShape(topEnd = 30.dp, bottomEnd = 30.dp)
+    val shape = RoundedCornerShape(topEnd = 26.dp, bottomEnd = 26.dp)
     Column(
         modifier = Modifier
-            .width(306.dp)
-            .fillMaxHeight()
+            .width(262.dp)
             .statusBarsPadding()
             .padding(top = 10.dp, bottom = 12.dp)
             .glassPanel(
@@ -236,11 +232,10 @@ private fun VMapDrawer(
                 isDark = isDark,
                 accent = accent,
                 elevation = 30.dp,
-                base = 0.80f,
+                base = 0.91f,
             )
-            .verticalScroll(rememberScrollState())
             .navigationBarsPadding()
-            .padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 20.dp),
+            .padding(start = 14.dp, end = 14.dp, top = 16.dp, bottom = 16.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -248,18 +243,18 @@ private fun VMapDrawer(
             verticalAlignment = Alignment.Top,
         ) {
             Column {
-                GradientTitle(text = "V-Map", accent = accent, fontSize = 27.sp)
-                Spacer(Modifier.height(3.dp))
+                GradientTitle(text = "V-Map", accent = accent, fontSize = 23.sp)
+                Spacer(Modifier.height(2.dp))
                 Text(
                     text = "为歌声走过的城市",
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                    fontSize = 11.sp,
-                    letterSpacing = 1.4.sp,
+                    fontSize = 10.sp,
+                    letterSpacing = 1.1.sp,
                 )
             }
             Box(
                 modifier = Modifier
-                    .size(30.dp)
+                    .size(26.dp)
                     .clip(CircleShape)
                     .background(Color.White.copy(alpha = if (isDark) 0.07f else 0.45f))
                     .border(1.dp, Color.White.copy(alpha = if (isDark) 0.14f else 0.6f), CircleShape)
@@ -270,14 +265,14 @@ private fun VMapDrawer(
                     imageVector = Icons.Filled.Close,
                     contentDescription = "关闭",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(15.dp),
+                    modifier = Modifier.size(13.dp),
                 )
             }
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(16.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DrawerSectionChip(
                 label = "依你随行",
                 selected = section == Section.TIANYI,
@@ -296,7 +291,7 @@ private fun VMapDrawer(
             )
         }
 
-        Spacer(Modifier.height(22.dp))
+        Spacer(Modifier.height(18.dp))
         DrawerCaption("浏览")
         Page.entries.forEach { item ->
             DrawerNavItem(
@@ -309,9 +304,9 @@ private fun VMapDrawer(
             )
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(14.dp))
         HorizontalDivider(color = Color.White.copy(alpha = if (isDark) 0.10f else 0.55f))
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
 
         DrawerNavItem(
             icon = Icons.Filled.Share,
@@ -322,34 +317,7 @@ private fun VMapDrawer(
             onClick = onShare,
         )
 
-        Spacer(Modifier.height(22.dp))
-
-        // 底部提示卡：把抽屉下半部分的留白收住，同时告诉新用户怎么用
-        val tipShape = RoundedCornerShape(18.dp)
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(tipShape)
-                .background(Color.White.copy(alpha = if (isDark) 0.05f else 0.45f))
-                .border(1.dp, Color.White.copy(alpha = if (isDark) 0.10f else 0.6f), tipShape)
-                .padding(14.dp),
-        ) {
-            Text(
-                text = "小提示",
-                color = if (isDark) lerp(accent, Color.White, 0.3f) else accent,
-                fontSize = 10.sp,
-                letterSpacing = 1.6.sp,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = "双指缩放地图 · 点击城市看演出详情 · 左上角随时切换板块",
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
-                fontSize = 11.sp,
-                lineHeight = 17.sp,
-            )
-        }
-
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(18.dp))
         Text(
             text = "V-Map v0.1.0",
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
@@ -367,8 +335,8 @@ private fun DrawerCaption(text: String) {
         text = text,
         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
         fontSize = 10.sp,
-        letterSpacing = 2.sp,
-        modifier = Modifier.padding(start = 14.dp, bottom = 8.dp),
+        letterSpacing = 1.6.sp,
+        modifier = Modifier.padding(start = 12.dp, bottom = 6.dp),
     )
 }
 
@@ -382,11 +350,11 @@ private fun DrawerNavItem(
     isDark: Boolean,
     onClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(14.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 3.dp)
+            .padding(vertical = 2.dp)
             .clip(shape)
             .background(
                 if (selected) {
@@ -405,36 +373,36 @@ private fun DrawerNavItem(
                 },
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 11.dp),
+            .padding(horizontal = 10.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
                 .width(3.dp)
-                .height(16.dp)
+                .height(15.dp)
                 .clip(CircleShape)
                 .background(if (selected) accent else Color.Transparent),
         )
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(9.dp))
         Icon(
             imageVector = icon,
             contentDescription = label,
             tint = if (selected) lerp(accent, Color.White, 0.35f) else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(19.dp),
+            modifier = Modifier.size(18.dp),
         )
-        Spacer(Modifier.width(11.dp))
+        Spacer(Modifier.width(10.dp))
         Text(
             text = label,
             style = if (selected) {
                 TextStyle(
                     color = if (isDark) lerp(accent, Color.White, 0.45f) else accent,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
             } else {
                 TextStyle(
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                 )
             },
         )
@@ -451,7 +419,7 @@ private fun DrawerSectionChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(14.dp)
     Box(
         modifier = modifier
             .clip(shape)
@@ -475,17 +443,17 @@ private fun DrawerSectionChip(
                 shape = shape,
             )
             .clickable(onClick = onClick)
-            .padding(vertical = 11.dp),
+            .padding(vertical = 9.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
             style = if (selected) {
-                gradientTextStyle(accent, 14.sp)
+                gradientTextStyle(accent, 13.sp)
             } else {
                 TextStyle(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                 )
             },
             textAlign = TextAlign.Center,
