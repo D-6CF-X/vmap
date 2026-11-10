@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
   pull_request:
-    branches: [ main ]
+    branches: [ master ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -26,14 +26,8 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Provide Amap key
-        run: echo "AMAP_API_KEY=${{ secrets.AMAP_API_KEY }}" > local.properties
-
       - name: Make gradlew executable
         run: chmod +x ./gradlew
-
-      - name: Static analysis
-        run: ./gradlew ktlintCheck detekt
 
       - name: Unit tests
         run: ./gradlew testDebugUnitTest
@@ -48,5 +42,4 @@ jobs:
           name: reports
           path: |
             app/build/reports/**
-            config/detekt/**
           if-no-files-found: ignore

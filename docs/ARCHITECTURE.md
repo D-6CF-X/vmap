@@ -125,39 +125,20 @@ WHERE section IN (:currentSection, 'BOTH') AND deleted = 0;
 
 以后如果要做「自动记录路过的地方」（后台定位），再单独加 `visited_areas` 表。那时候「打卡」和「路过」是两种数据来源，混在一张表里会互相污染统计口径。
 
-## 地图双引擎
+## 地图：自绘 Canvas
 
-```
-MapCanvas
-├── BuildConfig.HAS_AMAP_KEY == true  → AmapCanvas（高德 9.8.3）
-└── false                              → OsmCanvas（osmdroid 6.1.20 + OSM 瓦片）
-```
+不依赖任何地图 SDK。启动时读 `assets/china_provinces.json`（地级市边界，370 城）和 `assets/province_bounds.json`（省级边界，34 省），用 Compose Canvas 直接画：
 
-为什么要两个：
+- 未点亮城市填深灰，去过的城市填应援色
+- 省级边界画粗描边、地级市画细描边
+- 双指缩放（1~10x）+ 拖动 + 点击命中检测（射线法）
+- 城市名/省名按地块的屏幕外接框大小自适应显示，装不下就不画、位置钳在地块内
 
-- **高德**体验好、国内瓦片快、中文地名全，但需要 Key，且 Key 绑定包名 + 签名。
-- **osmdroid** 不需要任何 Key，`git clone` 完直接能看地图。
+这样做的代价是一次性付的：无网络依赖、无瓦片加载白块、无 SDK 版本兼容问题、样式完全可控。以后想做点亮动画、按省统计，都在这一层上加。
 
-开源项目如果只有高德，每个想跑起来的人都得去高德注册、建应用、填包名、算 SHA1。这个门槛会挡掉大部分人。所以规则是：**有 Key 用高德，没 Key 自动降级**，`MapCanvas` 里一个 if 决定。
+### 坐标：入库 GCJ-02，渲染转 WGS-84
 
-### 两个引擎的坐标系不一样
-
-这是最容易出错的地方：
-
-| 引擎 | 瓦片坐标系 | 我们存的 |
-|---|---|---|
-| 高德 | GCJ-02 | GCJ-02 |
-| OSM | **WGS-84** | GCJ-02 |
-
-所以 `OsmCanvas` 里每个点画上去之前必须 `point.asWgs84()` 转一次。没转的话整张图上的点会统一偏 300~500 米，而且看起来「差不多对」特别难发现。
-
-这也是当初把坐标系做成类型而不是裸 `Double` 的直接回报：转换只有一个入口，加第二个引擎时不用满地找。
-
-### 共用部分
-
-- `MapIcons.cityDotBitmap` / `arrowBitmap` 返回 `Bitmap`，两个引擎各自包成 `BitmapDescriptor` 或 `BitmapDrawable`。
-- `MapIcons.bearing` 收裸 double，不绑任何 SDK 类型。
-- 路线箭头都是**预先旋转位图**，不用 marker 的旋转属性（高德 9.x 没有可写的 `rotate`）。
+边界数据是 WGS-84，打卡点入库统一 GCJ-02，渲染前 `point.asWgs84()` 转回 WGS-84 再投影到画布。转换只在 `GeoPoint` 一个入口，这是把坐标系做成类型（`srid`）而不是裸 `Double` 的直接回报。
 
 ## 同步预留
 

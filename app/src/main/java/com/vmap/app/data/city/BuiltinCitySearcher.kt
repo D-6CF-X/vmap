@@ -1,11 +1,22 @@
 package com.vmap.app.data.city
 
 /**
- * 城市搜索的统一入口。两个实现：
- * - [CitySearcher]（高德，走 SDK，Android 15 及以下）
- * - [BuiltinCitySearcher]（内置列表，Android 16 及以上，避免加载高德 native 库）
- *
- * 两者的坐标统一是 WGS84，入库前再转 GCJ02。
+ * 一次搜索命中的行政区。经纬度统一为 WGS84，入库前由调用方再转 GCJ02。
+ */
+data class CityHit(
+    val adcode: String,
+    val name: String,
+    val parent: String,
+    val lat: Double,
+    val lng: Double,
+) {
+    val displayName: String
+        get() = if (parent.isBlank() || parent == name) name else "$parent · $name"
+}
+
+/**
+ * 城市搜索的统一入口。目前只有内置实现 [BuiltinCitySearcher]，
+ * 坐标统一是 WGS84，入库前再转 GCJ02。
  */
 interface CitySearchProvider {
     fun search(keyword: String, onResult: (List<CityHit>) -> Unit)

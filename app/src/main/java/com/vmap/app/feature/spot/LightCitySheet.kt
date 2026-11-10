@@ -39,7 +39,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import android.os.Build
 import com.vmap.app.VMapApp
 import com.vmap.app.core.geo.GeoPoint
 import com.vmap.app.core.geo.Srid
@@ -47,7 +46,6 @@ import com.vmap.app.core.ui.accent
 import com.vmap.app.data.city.BuiltinCitySearcher
 import com.vmap.app.data.city.CityHit
 import com.vmap.app.data.city.CitySearchProvider
-import com.vmap.app.data.city.CitySearcher
 import com.vmap.app.domain.model.Section
 import com.vmap.app.domain.model.Spot
 import kotlinx.coroutines.delay
@@ -66,10 +64,7 @@ fun LightCitySheet(
     val app = context.applicationContext as VMapApp
     val scope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val searcher: CitySearchProvider = remember {
-        // Android 16 上高德 search SDK 的 so 不兼容，改用内置列表
-        if (Build.VERSION.SDK_INT < 36) CitySearcher(context) else BuiltinCitySearcher()
-    }
+    val searcher: CitySearchProvider = remember { BuiltinCitySearcher() }
     val accent = section.accent
 
     var keyword by remember { mutableStateOf("") }

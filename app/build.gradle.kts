@@ -5,18 +5,6 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-val amapKey: String = System.getenv("AMAP_API_KEY")
-    ?: rootProject.file("local.properties")
-        .takeIf { it.exists() }
-        ?.readLines()
-        ?.firstOrNull { it.startsWith("AMAP_API_KEY=") }
-        ?.substringAfter("=")
-        ?.trim()
-    ?: ""
-
-// ./gradlew assembleDebug -PforceOsm=true 可强制走 osmdroid，用于验证兜底引擎
-val forceOsm: Boolean = providers.gradleProperty("forceOsm").orNull == "true"
-
 android {
     namespace = "com.vmap.app"
     compileSdk = 35
@@ -27,12 +15,6 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
-
-        manifestPlaceholders["AMAP_API_KEY"] = amapKey
-
-        // 没有 Key 时自动降级到 osmdroid，保证 clone 下来就能看到地图
-        buildConfigField("boolean", "HAS_AMAP_KEY", amapKey.isNotBlank().toString())
-        buildConfigField("boolean", "FORCE_OSM", forceOsm.toString())
 
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a")
@@ -61,7 +43,6 @@ android {
 
     buildFeatures {
         compose = true
-        buildConfig = true
     }
 
     packaging {
@@ -100,9 +81,4 @@ dependencies {
     ksp(libs.androidx.room.compiler)
 
     implementation(libs.coil.compose)
-
-    implementation(libs.amap.map)
-    implementation(libs.amap.search)
-
-    implementation(libs.osmdroid.android)
 }
