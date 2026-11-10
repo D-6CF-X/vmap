@@ -1,22 +1,23 @@
 package com.vmap.app.feature.timeline
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -24,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -61,71 +63,107 @@ fun TimelineScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 56.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 64.dp, bottom = 24.dp),
     ) {
         itemsIndexed(
             items = chronological.reversed(),
             key = { _, spot -> spot.id },
         ) { index, spot ->
-            if (index > 0) {
-                Icon(
-                    imageVector = Icons.Filled.ArrowDownward,
-                    contentDescription = null,
-                    tint = accent.copy(alpha = 0.5f),
-                    modifier = Modifier.padding(start = 6.dp).width(14.dp).height(14.dp),
-                )
-            }
-            TimelineCard(
+            TimelineNode(
                 spot = spot,
                 accent = accent,
-                order = chronological.size - index,
+                isLast = index == chronological.size - 1,
             )
         }
     }
 }
 
+/**
+ * 侧栏式时间线：左侧一条应援色时间轴（圆点 + 竖线）串起走过的路，右侧是卡片。
+ * 最新的在最上，一路向下到最早。
+ */
 @Composable
-private fun TimelineCard(
+private fun TimelineNode(
     spot: Spot,
-    accent: androidx.compose.ui.graphics.Color,
-    order: Int,
+    accent: Color,
+    isLast: Boolean,
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        shape = MaterialTheme.shapes.large,
-        modifier = Modifier.fillMaxWidth(),
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Max),
     ) {
-        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Surface(color = accent, shape = CircleShape) {
-                Box(modifier = Modifier.width(26.dp).height(26.dp), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = order.toString(),
-                        color = androidx.compose.ui.graphics.Color(0xFF06151B),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
+        // 左侧时间轴：圆点 + 竖线
+        Column(
+            modifier = Modifier
+                .width(36.dp)
+                .fillMaxHeight(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Box(modifier = Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .size(18.dp)
+                        .background(accent.copy(alpha = 0.22f), CircleShape),
+                )
+                Box(
+                    modifier = Modifier
+                        .size(9.dp)
+                        .background(accent, CircleShape),
+                )
             }
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
+            if (!isLast) {
+                Box(
+                    modifier = Modifier
+                        .width(2.dp)
+                        .weight(1f)
+                        .background(accent.copy(alpha = 0.22f)),
+                )
+            }
+        }
+
+        Spacer(Modifier.width(14.dp))
+
+        // 右侧卡片
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            shape = MaterialTheme.shapes.large,
+            modifier = Modifier
+                .weight(1f)
+                .padding(bottom = 14.dp),
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Text(
+                    text = SimpleDateFormat("yyyy.MM.dd", Locale.getDefault())
+                        .format(Date(spot.performedAt)),
+                    color = accent,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+                Spacer(Modifier.height(4.dp))
                 Text(
                     text = spot.cityName,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                 )
-                Text(
-                    text = spot.title,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp,
-                )
+                if (spot.title.isNotBlank()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = spot.title,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 13.sp,
+                    )
+                }
+                if (spot.venue.isNotBlank()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = spot.venue,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                    )
+                }
             }
-            Text(
-                text = SimpleDateFormat("yyyy.MM.dd", Locale.getDefault()).format(Date(spot.performedAt)),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp,
-            )
         }
     }
 }
