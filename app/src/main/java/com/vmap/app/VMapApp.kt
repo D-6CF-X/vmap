@@ -28,5 +28,7 @@ class AppContainer(context: Context) {
     val spotRepository: SpotRepository =
         SpotRepositoryImpl(database.spotDao(), database.photoDao(), database.tagDao())
 
+    val songDao = database.songDao()
+
     val photoStore: PhotoStore = PhotoStore(context)
 }

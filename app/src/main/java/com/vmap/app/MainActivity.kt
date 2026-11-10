@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.DrawerValue
@@ -87,6 +88,8 @@ import com.vmap.app.feature.achievement.AchievementScreen
 import com.vmap.app.feature.map.MapScreen
 import com.vmap.app.feature.map.MapViewModel
 import com.vmap.app.feature.review.YearReviewScreen
+import com.vmap.app.feature.songs.SongBoardScreen
+import com.vmap.app.feature.songs.SongBoardViewModel
 import com.vmap.app.feature.spot.LightCitySheet
 import com.vmap.app.feature.timeline.TimelineScreen
 import kotlinx.coroutines.launch
@@ -131,6 +134,7 @@ private enum class Page(val label: String, val icon: ImageVector) {
     TIMELINE("时间线", Icons.Filled.Timeline),
     ACHIEVEMENT("成就", Icons.Filled.EmojiEvents),
     REVIEW("年度回顾", Icons.Filled.CalendarMonth),
+    SONGS("歌单排行", Icons.Filled.QueueMusic),
 }
 
 @Composable
@@ -141,6 +145,12 @@ private fun VMapRoot() {
     val viewModel: MapViewModel = viewModel(
         factory = viewModelFactory {
             initializer { MapViewModel(app.container.spotRepository) }
+        },
+    )
+
+    val songViewModel: SongBoardViewModel = viewModel(
+        factory = viewModelFactory {
+            initializer { SongBoardViewModel(app.container.songDao) }
         },
     )
 
@@ -318,6 +328,11 @@ private fun VMapRoot() {
 
                         Page.ACHIEVEMENT -> AchievementScreen(viewModel = viewModel, isDark = isDark)
                         Page.REVIEW -> YearReviewScreen(viewModel = viewModel, isDark = isDark)
+                        Page.SONGS -> SongBoardScreen(
+                            viewModel = songViewModel,
+                            isDark = isDark,
+                            accent = accent,
+                        )
                     }
                 }
 
