@@ -66,8 +66,8 @@ private val LightPalette = MapPalette(
     shadow = Color(0x1A000000),
 )
 
-/** 缩放超过这个值才显示地级市边界与未点亮城市名，避免全国视图糊成一团。 */
-private const val DETAIL_ZOOM = 2f
+/** 缩放低于此值显示省名、高于此值显示城市名（互斥，学高德：缩小看省、放大看城）。 */
+private const val DETAIL_ZOOM = 2.2f
 
 /**
  * 自绘中国地图。去过城市整块填应援色，点击城市有选中高亮，路线为 3D 抛物线航线。
@@ -119,12 +119,12 @@ fun ChinaMapCanvas(
     )
     val flow = if (animated) animatedFlow.value else 0.5f
 
-    // 所有城市名预测量缓存
+    // 所有城市名预测量缓存（字号小，学高德不抢戏）
     val labelLayouts = remember(provinces) {
         provinces.associate { p ->
             p.adcode to textMeasurer.measure(
                 text = AnnotatedString(p.name),
-                style = TextStyle(fontSize = 10.sp),
+                style = TextStyle(fontSize = 9.sp),
                 constraints = Constraints(maxWidth = 200),
             )
         }
@@ -136,7 +136,7 @@ fun ChinaMapCanvas(
         provinceLabels.associate { label ->
             label.name to textMeasurer.measure(
                 text = AnnotatedString(label.name),
-                style = TextStyle(fontSize = 13.sp),
+                style = TextStyle(fontSize = 11.sp),
                 constraints = Constraints(maxWidth = 300),
             )
         }
@@ -253,29 +253,18 @@ fun ChinaMapCanvas(
             if (br.x - tl.x < tw * minRatio || br.y - tl.y < th * 1.6f) return false
             val pad = 3f
             val c = toScreen(labelV.x, labelV.y)
-            // 候选位置：质心优先，其次上下左右微调，学高德的多候选避让，尽量容纳更多名字
-            val step = th * 0.5f
-            val candidates = listOf(
-                c,
-                Offset(c.x, c.y - step),
-                Offset(c.x, c.y + step),
-                Offset(c.x - step, c.y),
-                Offset(c.x + step, c.y),
-            )
-            for (cc in candidates) {
-                val x = (cc.x - tw / 2f).coerceIn(tl.x, (br.x - tw).coerceAtLeast(tl.x))
-                val y = (cc.y - th / 2f).coerceIn(tl.y, (br.y - th).coerceAtLeast(tl.y))
-                val rect = Rect(x - pad, y - pad, x + tw + pad, y + th + pad)
-                if (occupied.none { it.overlaps(rect) }) {
-                    occupied.add(rect)
-                    drawText(layout, color = color, topLeft = Offset(x, y))
-                    return true
-                }
-            }
-            return false
+            // 单一位置：质心放不下就跳过。高德的字很稀疏，不为塞名字做偏移。
+            val x = (c.x - tw / 2f).coerceIn(tl.x, (br.x - tw).coerceAtLeast(tl.x))
+            val y = (c.y - th / 2f).coerceIn(tl.y, (br.y - th).coerceAtLeast(tl.y))
+            val rect = Rect(x - pad, y - pad, x + tw + pad, y + th + pad)
+            if (occupied.any { it.overlaps(rect) }) return false
+            occupied.add(rect)
+            drawText(layout, color = color, topLeft = Offset(x, y))
+            return true
         }
 
-        // 标注顺序：点亮城市 > 省名（按面积降序）> 未点亮城市（按面积降序），重叠自动抽稀
+        // 学高德：省名和城市名互斥——缩小看省，放大看城。
+        // 点亮城市名是用户自己的数据，两种视图都显示。
         provinces.filter { visitedAdcodes.contains(it.adcode) }
             .sortedByDescending { it.bounds.width * it.bounds.height }
             .forEach { p ->
@@ -283,15 +272,15 @@ fun ChinaMapCanvas(
                 tryPlace(layout, p.label, accent, p.bounds, 1.05f)
             }
 
-        provinceLabels
-            .sortedByDescending { provinceBBoxes[it.adcode]?.let { r -> r.width * r.height } ?: 0f }
-            .forEach { label ->
-                val layout = provinceLayouts[label.name] ?: return@forEach
-                val bbox = provinceBBoxes[label.adcode] ?: return@forEach
-                tryPlace(layout, Offset(label.x, label.y), palette.label, bbox, 1.05f)
-            }
-
-        if (scale >= DETAIL_ZOOM) {
+        if (scale < DETAIL_ZOOM) {
+            provinceLabels
+                .sortedByDescending { provinceBBoxes[it.adcode]?.let { r -> r.width * r.height } ?: 0f }
+                .forEach { label ->
+                    val layout = provinceLayouts[label.name] ?: return@forEach
+                    val bbox = provinceBBoxes[label.adcode] ?: return@forEach
+                    tryPlace(layout, Offset(label.x, label.y), palette.label, bbox, 1.05f)
+                }
+        } else {
             provinces.filter { !visitedAdcodes.contains(it.adcode) }
                 .sortedByDescending { it.bounds.width * it.bounds.height }
                 .forEach { p ->
