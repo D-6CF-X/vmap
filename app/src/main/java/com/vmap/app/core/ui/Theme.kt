@@ -7,6 +7,8 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import com.vmap.app.domain.model.Board
 import com.vmap.app.domain.model.Section
 
 /** 洛天依应援色 */
@@ -20,6 +22,25 @@ val Section.accent: Color
     get() = when (this) {
         Section.TIANYI -> TianyiBlue
         Section.MIKU -> MikuGreen
+    }
+
+/**
+ * 综合模式的应援色取两色的中间值（蓝绿之间），
+ * 需要表现"两个板块同时在场"的地方用 [Board.gradientColors] 做渐变。
+ */
+val Board.accent: Color
+    get() = when (this) {
+        Board.TIANYI -> TianyiBlue
+        Board.MIKU -> MikuGreen
+        Board.ALL -> Color(0xFF4FC8DE)
+    }
+
+/** 板块的渐变两端：单板块是同色系深浅，综合模式是天依蓝→初音绿。 */
+val Board.gradientColors: List<Color>
+    get() = when (this) {
+        Board.TIANYI -> listOf(TianyiBlue, TianyiBlue)
+        Board.MIKU -> listOf(MikuGreen, MikuGreen)
+        Board.ALL -> listOf(TianyiBlue, MikuGreen)
     }
 
 private val DarkColors = darkColorScheme(

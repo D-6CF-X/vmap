@@ -5,7 +5,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -72,6 +76,8 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.vmap.app.core.ui.GradientTitle
 import com.vmap.app.core.ui.VMapTheme
 import com.vmap.app.core.ui.accent
+import com.vmap.app.core.ui.gradientColors
+import com.vmap.app.domain.model.Board
 import com.vmap.app.core.ui.glassPanel
 import com.vmap.app.core.ui.gradientTextStyle
 import com.vmap.app.data.share.ShareCardGenerator
@@ -144,13 +150,22 @@ private fun VMapRoot() {
         var page by remember { mutableStateOf(Page.MAP) }
         var showLightSheet by remember { mutableStateOf(false) }
         val section by viewModel.section.collectAsStateWithLifecycle()
+        val board by viewModel.board.collectAsStateWithLifecycle()
         val drawerState = rememberDrawerState(DrawerValue.Closed)
         val scope = rememberCoroutineScope()
 
-        // 侧栏壁纸：选图 → 裁剪 → 存私有目录
+        // 主色跟着板块过渡，切到综合就是蓝绿中间色
+        val accent = animateColorAsState(
+            targetValue = board.accent,
+            animationSpec = tween(THEME_TRANSITION_MS),
+            label = "boardAccent",
+        ).value
+
+        // 侧栏壁纸：每个板块各存一张
+        val boardKey = board.name.lowercase()
         var wallpaper by remember { mutableStateOf<ImageBitmap?>(null) }
         var cropSource by remember { mutableStateOf<ImageBitmap?>(null) }
-        LaunchedEffect(Unit) { wallpaper = DrawerWallpaper.load(context) }
+        LaunchedEffect(boardKey) { wallpaper = DrawerWallpaper.load(context, boardKey) }
         val pickWallpaper = rememberLauncherForActivityResult(
             contract = ActivityResultContracts.PickVisualMedia(),
         ) { uri ->
@@ -201,11 +216,12 @@ private fun VMapRoot() {
             scrimColor = Color.Black.copy(alpha = if (isDark) 0.30f else 0.20f),
             drawerContent = {
                 VMapDrawer(
-                    section = section,
+                    board = board,
                     page = page,
                     isDark = isDark,
+                    accent = accent,
                     wallpaper = wallpaper,
-                    onSelectSection = viewModel::selectSection,
+                    onSelectBoard = viewModel::selectBoard,
                     onSelectPage = { item ->
                         page = item
                         scope.launch { drawerState.close() }
@@ -216,7 +232,7 @@ private fun VMapRoot() {
                         )
                     },
                     onClearWallpaper = {
-                        DrawerWallpaper.clear(context)
+                        DrawerWallpaper.clear(context, boardKey)
                         wallpaper = null
                     },
                     onShare = {
@@ -230,7 +246,7 @@ private fun VMapRoot() {
                             ShareHelper.saveAndShare(
                                 context = context,
                                 bitmap = bitmap,
-                                title = "V-Map-${section.name}",
+                                title = "V-Map-${board.name}",
                             )
                         }
                     },
@@ -260,7 +276,7 @@ private fun VMapRoot() {
                                 )
                                 drawCircle(
                                     brush = Brush.radialGradient(
-                                        listOf(section.accent.copy(alpha = glowStrength), Color.Transparent),
+                                        listOf(accent.copy(alpha = glowStrength), Color.Transparent),
                                     ),
                                     radius = size.width * 0.9f,
                                     center = Offset(size.width * 0.92f, size.height * 0.04f),
@@ -268,7 +284,7 @@ private fun VMapRoot() {
                                 drawCircle(
                                     brush = Brush.radialGradient(
                                         listOf(
-                                            section.accent.copy(alpha = glowStrength * 0.55f),
+                                            accent.copy(alpha = glowStrength * 0.55f),
                                             Color.Transparent,
                                         ),
                                     ),
@@ -279,20 +295,30 @@ private fun VMapRoot() {
                     )
                 }
 
-                when (page) {
-                    Page.MAP -> MapScreen(
-                        viewModel = viewModel,
-                        onLightCity = { showLightSheet = true },
-                        dimmed = showLightSheet || drawerState.isOpen,
-                    )
+                // 页面切换做淡入 + 轻微横向位移，不是硬切
+                AnimatedContent(
+                    targetState = page,
+                    transitionSpec = {
+                        (fadeIn(tween(260)) + slideInHorizontally { it / 14 }) togetherWith
+                            (fadeOut(tween(160)) + slideOutHorizontally { -it / 14 })
+                    },
+                    label = "pageSwitch",
+                ) { current ->
+                    when (current) {
+                        Page.MAP -> MapScreen(
+                            viewModel = viewModel,
+                            onLightCity = { showLightSheet = true },
+                            dimmed = showLightSheet || drawerState.isOpen,
+                        )
 
-                    Page.TIMELINE -> TimelineScreen(
-                        viewModel = viewModel,
-                        isDark = isDark,
-                    )
+                        Page.TIMELINE -> TimelineScreen(
+                            viewModel = viewModel,
+                            isDark = isDark,
+                        )
 
-                    Page.ACHIEVEMENT -> AchievementScreen(viewModel = viewModel, isDark = isDark)
-                    Page.REVIEW -> YearReviewScreen(viewModel = viewModel, isDark = isDark)
+                        Page.ACHIEVEMENT -> AchievementScreen(viewModel = viewModel, isDark = isDark)
+                        Page.REVIEW -> YearReviewScreen(viewModel = viewModel, isDark = isDark)
+                    }
                 }
 
                 // 左上角汉堡按钮，打开抽屉（覆盖层，所有页面共用）；抽屉打开时淡出，避免露出半截
@@ -310,7 +336,7 @@ private fun VMapRoot() {
                             .glassPanel(
                                 shape = RoundedCornerShape(14.dp),
                                 isDark = isDark,
-                                accent = section.accent,
+                                accent = accent,
                                 elevation = 10.dp,
                                 base = 0.55f,
                             )
@@ -338,10 +364,10 @@ private fun VMapRoot() {
         cropSource?.let { source ->
             WallpaperCropDialog(
                 source = source,
-                accent = section.accent,
+                accent = accent,
                 onDismiss = { cropSource = null },
                 onConfirm = { bitmap ->
-                    DrawerWallpaper.save(context, bitmap)
+                    DrawerWallpaper.save(context, boardKey, bitmap)
                     wallpaper = bitmap.asImageBitmap()
                     cropSource = null
                 },
@@ -353,18 +379,18 @@ private fun VMapRoot() {
 /** 玻璃抽屉：半透明雾面 + 应援色冷光 + 高光边，内容用统一的玻璃语言。 */
 @Composable
 private fun VMapDrawer(
-    section: Section,
+    board: Board,
     page: Page,
     isDark: Boolean,
+    accent: Color,
     wallpaper: ImageBitmap?,
-    onSelectSection: (Section) -> Unit,
+    onSelectBoard: (Board) -> Unit,
     onSelectPage: (Page) -> Unit,
     onPickWallpaper: () -> Unit,
     onClearWallpaper: () -> Unit,
     onShare: () -> Unit,
     onClose: () -> Unit,
 ) {
-    val accent = section.accent
     val shape = RoundedCornerShape(topEnd = 26.dp, bottomEnd = 26.dp)
 
     // 壁纸用 BitmapShader 铺（cover），交给 background 绘制，尺寸由修饰符边界保证准确
@@ -467,23 +493,18 @@ private fun VMapDrawer(
 
         Spacer(Modifier.height(16.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DrawerSectionChip(
-                label = "依你随行",
-                selected = section == Section.TIANYI,
-                accent = Section.TIANYI.accent,
-                isDark = isDark,
-                onClick = { onSelectSection(Section.TIANYI) },
-                modifier = Modifier.weight(1f),
-            )
-            DrawerSectionChip(
-                label = "因音而遇",
-                selected = section == Section.MIKU,
-                accent = Section.MIKU.accent,
-                isDark = isDark,
-                onClick = { onSelectSection(Section.MIKU) },
-                modifier = Modifier.weight(1f),
-            )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Board.entries.forEach { item ->
+                DrawerBoardChip(
+                    label = item.label,
+                    selected = board == item,
+                    accent = item.accent,
+                    gradient = item.gradientColors,
+                    isDark = isDark,
+                    onClick = { onSelectBoard(item) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
 
         Spacer(Modifier.height(18.dp))
@@ -650,12 +671,13 @@ private fun RemoveWallpaperChip(onClick: () -> Unit) {
     }
 }
 
-/** 板块切换胶囊：选中时是应援色玻璃 + 立体渐变字。 */
+/** 板块切换胶囊：选中时是应援色玻璃。综合模式用天依蓝→初音绿的双色渐变。 */
 @Composable
-private fun DrawerSectionChip(
+private fun DrawerBoardChip(
     label: String,
     selected: Boolean,
     accent: Color,
+    gradient: List<Color>,
     isDark: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -667,7 +689,10 @@ private fun DrawerSectionChip(
             .background(
                 if (selected) {
                     Brush.verticalGradient(
-                        listOf(accent.copy(alpha = 0.40f), accent.copy(alpha = 0.12f)),
+                        listOf(
+                            gradient.first().copy(alpha = 0.42f),
+                            gradient.last().copy(alpha = 0.16f),
+                        ),
                     )
                 } else {
                     Brush.verticalGradient(
@@ -680,7 +705,16 @@ private fun DrawerSectionChip(
             )
             .border(
                 width = 1.dp,
-                color = if (selected) accent.copy(alpha = 0.60f) else Color.White.copy(alpha = if (isDark) 0.12f else 0.6f),
+                brush = Brush.horizontalGradient(
+                    if (selected) {
+                        listOf(gradient.first().copy(alpha = 0.70f), gradient.last().copy(alpha = 0.70f))
+                    } else {
+                        listOf(
+                            Color.White.copy(alpha = if (isDark) 0.12f else 0.6f),
+                            Color.White.copy(alpha = if (isDark) 0.12f else 0.6f),
+                        )
+                    },
+                ),
                 shape = shape,
             )
             .clickable(onClick = onClick)
@@ -689,15 +723,14 @@ private fun DrawerSectionChip(
     ) {
         Text(
             text = label,
-            style = if (selected) {
-                gradientTextStyle(accent, 13.sp)
+            color = if (selected) {
+                if (isDark) lerp(accent, Color.White, 0.42f) else lerp(accent, Color(0xFF08161E), 0.62f)
             } else {
-                TextStyle(
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 13.sp,
-                )
+                MaterialTheme.colorScheme.onSurfaceVariant
             },
-            textAlign = TextAlign.Center,
+            fontSize = 12.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1,
         )
     }
 }

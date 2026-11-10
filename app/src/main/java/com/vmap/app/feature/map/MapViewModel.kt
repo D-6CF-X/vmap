@@ -2,6 +2,7 @@ package com.vmap.app.feature.map
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.vmap.app.domain.model.Board
 import com.vmap.app.domain.model.Section
 import com.vmap.app.domain.model.Spot
 import com.vmap.app.domain.model.Tag
@@ -25,6 +26,10 @@ class MapViewModel(
     private val _section = MutableStateFlow(Section.TIANYI)
     val section: StateFlow<Section> = _section.asStateFlow()
 
+    /** 视图范围：单板块或综合。综合模式下 [section] 仍保留上次选择，用于新建打卡的归属。 */
+    private val _board = MutableStateFlow(Board.TIANYI)
+    val board: StateFlow<Board> = _board.asStateFlow()
+
     /** 当前筛选的标签 id，null 表示不过滤。 */
     private val _filterTag = MutableStateFlow<String?>(null)
     val filterTag: StateFlow<String?> = _filterTag.asStateFlow()
@@ -35,19 +40,28 @@ class MapViewModel(
     private val _isDark = MutableStateFlow(true)
     val isDark: StateFlow<Boolean> = _isDark.asStateFlow()
 
-    private val query = combine(_section, _filterTag) { s, t -> s to t }
+    private val query = combine(_board, _section, _filterTag) { b, s, t -> Triple(b, s, t) }
 
-    /** 按时间倒序，用于地图打点与列表。 */
+    /** 按时间倒序，用于地图打点与列表。综合模式取全部板块。 */
     val spots: StateFlow<List<Spot>> = query
-        .flatMapLatest { (s, t) ->
-            if (t == null) repository.observeSpots(s) else repository.observeSpotsByTag(s, t)
+        .flatMapLatest { (b, s, t) ->
+            when {
+                b == Board.ALL -> repository.observeAllSpots()
+                t == null -> repository.observeSpots(s)
+                else -> repository.observeSpotsByTag(s, t)
+            }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** 按时间正序，用于连线与箭头方向。 */
     val chronological: StateFlow<List<Spot>> = query
-        .flatMapLatest { (s, t) ->
-            if (t == null) repository.observeChronological(s) else repository.observeChronologicalByTag(s, t)
+        .flatMapLatest { (b, s, t) ->
+            when {
+                b == Board.ALL -> repository.observeAllSpots()
+                    .map { list -> list.sortedBy { it.performedAt } }
+                t == null -> repository.observeChronological(s)
+                else -> repository.observeChronologicalByTag(s, t)
+            }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -69,11 +83,19 @@ class MapViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun toggleSection() {
+        _board.value = Board.of(_section.value.other)
         _section.value = _section.value.other
     }
 
     fun selectSection(target: Section) {
         _section.value = target
+    }
+
+    /** 切换视图范围（单板块 / 综合）。综合模式下保留上次的归属板块。 */
+    fun selectBoard(target: Board) {
+        if (_board.value == target) return
+        _board.value = target
+        target.section?.let { _section.value = it }
     }
 
     fun setFilterTag(tagId: String?) {

@@ -14,3 +14,31 @@ enum class Section {
     val other: Section
         get() = if (this == TIANYI) MIKU else TIANYI
 }
+
+/**
+ * 视图范围：单板块，或两个板块合并的「综合」。
+ *
+ * 综合模式只影响展示（地图、时间线、统计），不落库——
+ * 打卡记录本身的归属永远是 [Section]。
+ */
+enum class Board(val label: String) {
+    TIANYI("依你随行"),
+    MIKU("因音而遇"),
+    ALL("综合"),
+    ;
+
+    /** 综合模式没有归属板块，返回 null。 */
+    val section: Section?
+        get() = when (this) {
+            TIANYI -> Section.TIANYI
+            MIKU -> Section.MIKU
+            ALL -> null
+        }
+
+    companion object {
+        fun of(section: Section): Board = when (section) {
+            Section.TIANYI -> TIANYI
+            Section.MIKU -> MIKU
+        }
+    }
+}

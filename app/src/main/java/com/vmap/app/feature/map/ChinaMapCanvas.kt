@@ -97,7 +97,9 @@ fun ChinaMapCanvas(
     modifier: Modifier,
     spots: List<Spot>,
     route: List<Spot>,
-    section: Section,
+    accent: Color,
+    mixed: Boolean = false,
+    mixProgress: Float = 0f,
     showRoute: Boolean,
     onSpotClick: (Spot) -> Unit,
     animated: Boolean = true,
@@ -111,7 +113,6 @@ fun ChinaMapCanvas(
         provinceBounds.associate { it.adcode to it.bounds }
     }
     val textMeasurer = rememberTextMeasurer()
-    val accent = section.accent
     val palette = when {
         darkProgress >= 0.999f -> DarkPalette
         darkProgress <= 0.001f -> LightPalette
@@ -120,6 +121,23 @@ fun ChinaMapCanvas(
 
     val visitedAdcodes = remember(spots) {
         spots.map { it.adcode }.toSet()
+    }
+
+    // 综合模式下每个城市按自己归属的板块上色；同城两板块都有就用两色的中间值
+    val citySections = remember(spots) {
+        spots.groupBy { it.adcode }.mapValues { (_, v) -> v.map { s -> s.section }.distinct() }
+    }
+
+    /** 单个城市的点亮色：单板块模式就是应援色，综合模式按归属混合。 */
+    fun cityAccent(adcode: String): Color {
+        if (!mixed) return accent
+        val secs = citySections[adcode].orEmpty()
+        val own = when {
+            secs.isEmpty() -> accent
+            secs.size > 1 -> lerp(Section.TIANYI.accent, Section.MIKU.accent, 0.5f)
+            else -> secs.first().accent
+        }
+        return lerp(accent, own, mixProgress)
     }
 
     var scale by remember { mutableFloatStateOf(1f) }
@@ -233,17 +251,18 @@ fun ChinaMapCanvas(
         // 背景
         drawRect(palette.background)
 
-        // 城市地块填充：点亮填应援色，未点亮填表面色
-        // 日间应援色在浅灰地圖上偏淡，压深一档才看得出来被点亮
-        val litFill = lerp(lerp(accent, Color(0xFF08161E), 0.20f), accent, darkProgress)
-        val litEdge = lerp(
-            lerp(accent, Color(0xFF08161E), 0.42f),
-            lerp(accent, Color.White, 0.58f),
+        // 城市地块填充：点亮填该城市归属板块的应援色，未点亮填表面色
+        // 日间应援色在浅灰地图上偏淡，压深一档才看得出来被点亮
+        fun litFill(color: Color) = lerp(lerp(color, Color(0xFF08161E), 0.20f), color, darkProgress)
+        fun litEdge(color: Color) = lerp(
+            lerp(color, Color(0xFF08161E), 0.42f),
+            lerp(color, Color.White, 0.58f),
             darkProgress,
         )
         provinces.forEach { p ->
             val visited = visitedAdcodes.contains(p.adcode)
-            val fill = if (visited) litFill else palette.unlitCity
+            val cityColor = if (visited) cityAccent(p.adcode) else palette.unlitCity
+            val fill = if (visited) litFill(cityColor) else palette.unlitCity
             withTransform({
                 translate(dx, dy)
                 scale(k, k, pivot = Offset.Zero)
@@ -253,12 +272,16 @@ fun ChinaMapCanvas(
                     // 亮边：点亮地块像一块有厚度的亚克力，而不是扁平色块
                     drawPath(
                         p.path,
-                        color = litEdge.copy(alpha = 0.55f),
+                        color = litEdge(cityColor).copy(alpha = 0.55f),
                         style = Stroke(width = 1.1f / k),
                     )
                 }
                 if (p.adcode == selectedAdcode) {
-                    drawPath(p.path, color = accent, style = Stroke(width = 2.5f / k))
+                    drawPath(
+                        p.path,
+                        color = if (visited) cityColor else accent,
+                        style = Stroke(width = 2.5f / k),
+                    )
                 }
             }
         }
@@ -370,35 +393,37 @@ fun ChinaMapCanvas(
         }
 
         // 学高德：省名和城市名互斥——缩小看省，放大看城。
-        // 点亮城市名是用户自己的数据，两种视图都显示，做成立体招牌字。
-        // 点亮城市名：夜间是白→蓝的招牌字，日间换成深蓝字面（白字压在浅色地块上会消失），
-        // 两套按主题进度插值，切换时字色跟着一起过渡
-        val nightFill = listOf(
-            Color(0xFFFBFEFF),
-            lerp(accent, Color.White, 0.78f),
-            lerp(accent, Color.White, 0.34f),
-            accent,
-        )
-        val dayFill = listOf(
-            lerp(accent, Color(0xFF08161E), 0.88f),
-            lerp(accent, Color(0xFF08161E), 0.62f),
-            lerp(accent, Color(0xFF08161E), 0.30f),
-            lerp(accent, Color(0xFF08161E), 0.16f),
-        )
-        val litEmboss = Emboss(
-            fillColors = nightFill.indices.map { i -> lerp(dayFill[i], nightFill[i], darkProgress) },
-            depth = lerp(
-                lerp(accent, Color.Black, 0.62f),
-                lerp(accent, Color(0xFF06131C), 0.74f),
-                darkProgress,
-            ),
-            // 夜间是应援色外发光，日间换成深蓝的“投影描边”，白底上才立得住
-            glow = lerp(
-                lerp(accent, Color(0xFF0B1F2B), 0.70f),
-                lerp(accent, Color.White, 0.22f),
-                darkProgress,
-            ),
-        )
+        // 点亮城市名：夜间是白→应援色的招牌字，日间换成深蓝字面（白字压在浅色地块上会消失），
+        // 两套按主题进度插值；综合模式下每座城市用自己板块的颜色。
+        fun embossFor(color: Color): Emboss {
+            val nightFill = listOf(
+                Color(0xFFFBFEFF),
+                lerp(color, Color.White, 0.78f),
+                lerp(color, Color.White, 0.34f),
+                color,
+            )
+            val dayFill = listOf(
+                lerp(color, Color(0xFF08161E), 0.88f),
+                lerp(color, Color(0xFF08161E), 0.62f),
+                lerp(color, Color(0xFF08161E), 0.30f),
+                lerp(color, Color(0xFF08161E), 0.16f),
+            )
+            return Emboss(
+                fillColors = nightFill.indices.map { i -> lerp(dayFill[i], nightFill[i], darkProgress) },
+                depth = lerp(
+                    lerp(color, Color.Black, 0.62f),
+                    lerp(color, Color(0xFF06131C), 0.74f),
+                    darkProgress,
+                ),
+                // 夜间是应援色外发光，日间换成深蓝的"投影描边"，浅底上才立得住
+                glow = lerp(
+                    lerp(color, Color(0xFF0B1F2B), 0.70f),
+                    lerp(color, Color.White, 0.22f),
+                    darkProgress,
+                ),
+            )
+        }
+
         val plainShadow = Shadow(
             color = Color.Black.copy(alpha = 0.25f + 0.25f * darkProgress),
             offset = Offset(0f, 1.5f),
@@ -408,7 +433,8 @@ fun ChinaMapCanvas(
             .sortedByDescending { it.bounds.width * it.bounds.height }
             .forEach { p ->
                 val layout = litLabelLayouts[p.adcode] ?: return@forEach
-                tryPlace(layout, p.label, accent, p.bounds, 1f, emboss = litEmboss)
+                val color = cityAccent(p.adcode)
+                tryPlace(layout, p.label, color, p.bounds, 1f, emboss = embossFor(color))
             }
 
         if (scale < DETAIL_ZOOM) {
@@ -450,7 +476,10 @@ fun ChinaMapCanvas(
                 val height = len * 0.28f
                 val ctrl = Offset((a.x + b.x) / 2 + nx * height, (a.y + b.y) / 2 + ny * height)
 
-                drawLine(accent.copy(alpha = 0.15f), a, b, strokeWidth = 1.5f, cap = StrokeCap.Round)
+                // 综合模式下每条航段用起点城市的板块色，两块板各走各的线
+                val seg = if (mixed) lerp(accent, from.section.accent, mixProgress) else accent
+
+                drawLine(seg.copy(alpha = 0.15f), a, b, strokeWidth = 1.5f, cap = StrokeCap.Round)
 
                 val segments = 36
                 for (i in 0 until segments) {
@@ -462,7 +491,7 @@ fun ChinaMapCanvas(
                     val lift = 1f - kotlin.math.abs(tm - 0.5f) * 2f
                     val width = 0.7f + 4.5f * lift
                     val alpha = 0.30f + 0.70f * lift
-                    drawLine(accent.copy(alpha = alpha), p0, p1, strokeWidth = width, cap = StrokeCap.Round)
+                    drawLine(seg.copy(alpha = alpha), p0, p1, strokeWidth = width, cap = StrokeCap.Round)
                 }
 
                 val t = flow
@@ -471,9 +500,9 @@ fun ChinaMapCanvas(
                     val tt = (t - k * 0.04f).coerceIn(0f, 1f)
                     val tail = quadPoint(a, ctrl, b, tt)
                     val fade = (1f - k * 0.25f).coerceAtLeast(0f)
-                    drawCircle(accent.copy(alpha = 0.4f * fade), radius = 4f * (1f - k * 0.2f), center = tail)
+                    drawCircle(seg.copy(alpha = 0.4f * fade), radius = 4f * (1f - k * 0.2f), center = tail)
                 }
-                drawCircle(accent.copy(alpha = 0.22f), radius = 9f, center = pos)
+                drawCircle(seg.copy(alpha = 0.22f), radius = 9f, center = pos)
                 drawCircle(Color.White.copy(alpha = 0.95f), radius = 3.5f, center = pos)
             }
         }

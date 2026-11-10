@@ -1,5 +1,7 @@
 package com.vmap.app.feature.map
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -51,6 +53,7 @@ import com.vmap.app.core.geo.distanceKm
 import com.vmap.app.core.ui.THEME_TRANSITION_MS
 import com.vmap.app.core.ui.accent
 import com.vmap.app.core.ui.glassPanel
+import com.vmap.app.domain.model.Board
 import com.vmap.app.domain.model.Section
 import com.vmap.app.domain.model.Spot
 import com.vmap.app.domain.model.Tag
@@ -63,7 +66,7 @@ fun MapScreen(
     onLightCity: () -> Unit,
     dimmed: Boolean = false,
 ) {
-    val section by viewModel.section.collectAsStateWithLifecycle()
+    val board by viewModel.board.collectAsStateWithLifecycle()
     val spots by viewModel.spots.collectAsStateWithLifecycle()
     val route by viewModel.chronological.collectAsStateWithLifecycle()
     val stats by viewModel.stats.collectAsStateWithLifecycle()
@@ -73,6 +76,18 @@ fun MapScreen(
     val filterTag by viewModel.filterTag.collectAsStateWithLifecycle()
 
     var detailSpot by remember { mutableStateOf<Spot?>(null) }
+
+    // 板块切换时主色和"综合"混合进度都做过渡，地图不会瞬间变色
+    val accent = animateColorAsState(
+        targetValue = board.accent,
+        animationSpec = tween(THEME_TRANSITION_MS),
+        label = "boardAccent",
+    ).value
+    val mixProgress by animateFloatAsState(
+        targetValue = if (board == Board.ALL) 1f else 0f,
+        animationSpec = tween(THEME_TRANSITION_MS),
+        label = "boardMix",
+    )
 
     // 地图配色跟着主题一起过渡，不要瞬间变白/变黑
     val darkProgress by animateFloatAsState(
@@ -86,7 +101,9 @@ fun MapScreen(
             modifier = Modifier.fillMaxSize(),
             spots = spots,
             route = route,
-            section = section,
+            accent = accent,
+            mixed = board == Board.ALL,
+            mixProgress = mixProgress,
             showRoute = showRoute,
             onSpotClick = { detailSpot = it },
             // 有弹窗盖着时冻结动画，避免后台地图每帧重绘拖慢对话框
@@ -103,7 +120,7 @@ fun MapScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SectionSwitchBar(
-                accent = section.accent,
+                accent = accent,
                 stats = stats,
                 spots = spots,
                 route = route,
@@ -113,11 +130,12 @@ fun MapScreen(
                 isDark = isDark,
             )
 
-            if (tags.isNotEmpty()) {
+            // 综合模式下跨板块筛标签没有明确语义，先不显示
+            if (tags.isNotEmpty() && board != Board.ALL) {
                 TagFilterBar(
                     tags = tags,
                     filterTag = filterTag,
-                    accent = section.accent,
+                    accent = accent,
                     isDark = isDark,
                     onSelect = viewModel::setFilterTag,
                 )
@@ -125,7 +143,7 @@ fun MapScreen(
         }
 
         LightCityButton(
-            accent = section.accent,
+            accent = accent,
             onClick = onLightCity,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -178,47 +196,53 @@ private fun SectionSwitchBar(
             // 日间的应援色在白底上太浅，压深一档才看得清
             lerp(accent, Color(0xFF08161E), 0.55f)
         }
-        Text(
-            text = buildAnnotatedString {
-                when (statPage) {
-                    1 -> {
-                        append("累计里程 ")
-                        withStyle(SpanStyle(color = numberColor, fontWeight = FontWeight.Bold, fontSize = 17.sp)) {
-                            append("${totalKm.toInt()}")
-                        }
-                        append(" 公里")
-                    }
-
-                    2 -> {
-                        if (topCity == null) {
-                            append("还没有演出记录")
-                        } else {
-                            append("最常去 ")
-                            withStyle(SpanStyle(color = numberColor, fontWeight = FontWeight.Bold, fontSize = 15.sp)) {
-                                append(topCity.key)
-                            }
-                            append(" · ${topCity.value.size} 次")
-                        }
-                    }
-
-                    else -> {
-                        append("已点亮 ")
-                        withStyle(SpanStyle(color = numberColor, fontWeight = FontWeight.Bold, fontSize = 17.sp)) {
-                            append("${stats.cityCount}")
-                        }
-                        append(" 座城市 · ")
-                        withStyle(SpanStyle(color = numberColor, fontWeight = FontWeight.Bold, fontSize = 17.sp)) {
-                            append("${stats.spotCount}")
-                        }
-                        append(" 场演出")
-                    }
-                }
-            },
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 12.sp,
-            maxLines = 1,
+        Crossfade(
+            targetState = statPage,
+            animationSpec = tween(200),
+            label = "statView",
             modifier = Modifier.clickable { statPage = (statPage + 1) % 3 },
-        )
+        ) { current ->
+            Text(
+                text = buildAnnotatedString {
+                    when (current) {
+                        1 -> {
+                            append("累计里程 ")
+                            withStyle(SpanStyle(color = numberColor, fontWeight = FontWeight.Bold, fontSize = 17.sp)) {
+                                append("${totalKm.toInt()}")
+                            }
+                            append(" 公里")
+                        }
+
+                        2 -> {
+                            if (topCity == null) {
+                                append("还没有演出记录")
+                            } else {
+                                append("最常去 ")
+                                withStyle(SpanStyle(color = numberColor, fontWeight = FontWeight.Bold, fontSize = 15.sp)) {
+                                    append(topCity.key)
+                                }
+                                append(" · ${topCity.value.size} 次")
+                            }
+                        }
+
+                        else -> {
+                            append("已点亮 ")
+                            withStyle(SpanStyle(color = numberColor, fontWeight = FontWeight.Bold, fontSize = 17.sp)) {
+                                append("${stats.cityCount}")
+                            }
+                            append(" 座城市 · ")
+                            withStyle(SpanStyle(color = numberColor, fontWeight = FontWeight.Bold, fontSize = 17.sp)) {
+                                append("${stats.spotCount}")
+                            }
+                            append(" 场演出")
+                        }
+                    }
+                },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+                maxLines = 1,
+            )
+        }
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
