@@ -62,12 +62,22 @@ private val DarkPalette = MapPalette(
 )
 
 private val LightPalette = MapPalette(
-    background = Color(0xFFF5F6F8),
-    unlitCity = Color(0xFFE7EBF0),
-    cityBorder = Color(0xFFD9DEE5),
-    provinceBound = Color(0xFFA9B1BD),
-    label = Color(0xFF6B7480),
-    shadow = Color(0x1A000000),
+    background = Color(0xFFEFF3F8),
+    unlitCity = Color(0xFFE4EAF2),
+    cityBorder = Color(0xFFD6DEE8),
+    provinceBound = Color(0xFFAEB9C6),
+    label = Color(0xFF68758A),
+    shadow = Color(0x14000000),
+)
+
+/** 日夜切换时按进度混合两套配色，切换过程是渐变而不是闪一下。 */
+private fun blendPalette(light: MapPalette, dark: MapPalette, t: Float) = MapPalette(
+    background = lerp(light.background, dark.background, t),
+    unlitCity = lerp(light.unlitCity, dark.unlitCity, t),
+    cityBorder = lerp(light.cityBorder, dark.cityBorder, t),
+    provinceBound = lerp(light.provinceBound, dark.provinceBound, t),
+    label = lerp(light.label, dark.label, t),
+    shadow = lerp(light.shadow, dark.shadow, t),
 )
 
 /** 缩放低于此值显示省名、高于此值显示城市名（互斥，学高德：缩小看省、放大看城）。 */
@@ -92,6 +102,7 @@ fun ChinaMapCanvas(
     onSpotClick: (Spot) -> Unit,
     animated: Boolean = true,
     isDark: Boolean = true,
+    darkProgress: Float = if (isDark) 1f else 0f,
 ) {
     val context = LocalContext.current
     val provinces = remember { ChinaMapData.load(context) }
@@ -101,7 +112,11 @@ fun ChinaMapCanvas(
     }
     val textMeasurer = rememberTextMeasurer()
     val accent = section.accent
-    val palette = if (isDark) DarkPalette else LightPalette
+    val palette = when {
+        darkProgress >= 0.999f -> DarkPalette
+        darkProgress <= 0.001f -> LightPalette
+        else -> blendPalette(LightPalette, DarkPalette, darkProgress)
+    }
 
     val visitedAdcodes = remember(spots) {
         spots.map { it.adcode }.toSet()
@@ -219,9 +234,16 @@ fun ChinaMapCanvas(
         drawRect(palette.background)
 
         // 城市地块填充：点亮填应援色，未点亮填表面色
+        // 日间应援色在浅灰地圖上偏淡，压深一档才看得出来被点亮
+        val litFill = lerp(lerp(accent, Color(0xFF08161E), 0.20f), accent, darkProgress)
+        val litEdge = lerp(
+            lerp(accent, Color(0xFF08161E), 0.42f),
+            lerp(accent, Color.White, 0.58f),
+            darkProgress,
+        )
         provinces.forEach { p ->
             val visited = visitedAdcodes.contains(p.adcode)
-            val fill = if (visited) accent else palette.unlitCity
+            val fill = if (visited) litFill else palette.unlitCity
             withTransform({
                 translate(dx, dy)
                 scale(k, k, pivot = Offset.Zero)
@@ -231,7 +253,7 @@ fun ChinaMapCanvas(
                     // 亮边：点亮地块像一块有厚度的亚克力，而不是扁平色块
                     drawPath(
                         p.path,
-                        color = lerp(accent, Color.White, 0.58f).copy(alpha = 0.6f),
+                        color = litEdge.copy(alpha = 0.55f),
                         style = Stroke(width = 1.1f / k),
                     )
                 }
@@ -302,15 +324,24 @@ fun ChinaMapCanvas(
 
             if (emboss != null) {
                 // 立体招牌字：外发光 → 挤出厚度（向下堆叠）→ 渐变字面 → 顶部高光
+                // 日间的字是深色的，外发光要收着，否则 10sp 的小字会被糊成一团
                 drawText(
                     layout,
-                    color = emboss.glow.copy(alpha = 0.26f),
+                    color = emboss.glow.copy(alpha = 0.09f + 0.17f * darkProgress),
                     topLeft = Offset(x, y),
-                    shadow = Shadow(emboss.glow.copy(alpha = 0.75f), Offset(0f, 0f), 6f),
+                    shadow = Shadow(
+                        emboss.glow.copy(alpha = 0.30f + 0.45f * darkProgress),
+                        Offset(0f, 1f),
+                        2.5f + 3.5f * darkProgress,
+                    ),
                 )
                 val step = (th / 26f).coerceIn(0.8f, 1.8f)
                 for (i in 2 downTo 1) {
-                    drawText(layout, color = emboss.depth, topLeft = Offset(x, y + step * i))
+                    drawText(
+                        layout,
+                        color = emboss.depth.copy(alpha = 0.5f + 0.5f * darkProgress),
+                        topLeft = Offset(x, y + step * i),
+                    )
                 }
                 drawText(
                     layout,
@@ -320,7 +351,8 @@ fun ChinaMapCanvas(
                 drawText(
                     layout,
                     brush = Brush.verticalGradient(
-                        0f to Color.White.copy(alpha = 0.24f),
+                        // 日间的字是深蓝的，白色高光会把字糊灰，几乎关掉
+                        0f to Color.White.copy(alpha = 0.04f + 0.20f * darkProgress),
                         0.5f to Color.Transparent,
                         startY = 0f,
                         endY = th,
@@ -339,18 +371,36 @@ fun ChinaMapCanvas(
 
         // 学高德：省名和城市名互斥——缩小看省，放大看城。
         // 点亮城市名是用户自己的数据，两种视图都显示，做成立体招牌字。
+        // 点亮城市名：夜间是白→蓝的招牌字，日间换成深蓝字面（白字压在浅色地块上会消失），
+        // 两套按主题进度插值，切换时字色跟着一起过渡
+        val nightFill = listOf(
+            Color(0xFFFBFEFF),
+            lerp(accent, Color.White, 0.78f),
+            lerp(accent, Color.White, 0.34f),
+            accent,
+        )
+        val dayFill = listOf(
+            lerp(accent, Color(0xFF08161E), 0.88f),
+            lerp(accent, Color(0xFF08161E), 0.62f),
+            lerp(accent, Color(0xFF08161E), 0.30f),
+            lerp(accent, Color(0xFF08161E), 0.16f),
+        )
         val litEmboss = Emboss(
-            fillColors = listOf(
-                Color(0xFFFBFEFF),
-                lerp(accent, Color.White, 0.78f),
-                lerp(accent, Color.White, 0.34f),
-                accent,
+            fillColors = nightFill.indices.map { i -> lerp(dayFill[i], nightFill[i], darkProgress) },
+            depth = lerp(
+                lerp(accent, Color.Black, 0.62f),
+                lerp(accent, Color(0xFF06131C), 0.74f),
+                darkProgress,
             ),
-            depth = if (isDark) lerp(accent, Color(0xFF06131C), 0.74f) else lerp(accent, Color.Black, 0.62f),
-            glow = lerp(accent, Color.White, 0.22f),
+            // 夜间是应援色外发光，日间换成深蓝的“投影描边”，白底上才立得住
+            glow = lerp(
+                lerp(accent, Color(0xFF0B1F2B), 0.70f),
+                lerp(accent, Color.White, 0.22f),
+                darkProgress,
+            ),
         )
         val plainShadow = Shadow(
-            color = Color.Black.copy(alpha = if (isDark) 0.5f else 0.25f),
+            color = Color.Black.copy(alpha = 0.25f + 0.25f * darkProgress),
             offset = Offset(0f, 1.5f),
             blurRadius = 4f,
         )

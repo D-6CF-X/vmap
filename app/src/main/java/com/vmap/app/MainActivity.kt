@@ -10,6 +10,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.animateColorAsState
+import com.vmap.app.core.ui.THEME_TRANSITION_MS
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -104,6 +106,7 @@ import android.graphics.Shader
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.geometry.Offset
 
 class MainActivity : ComponentActivity() {
@@ -176,6 +179,23 @@ private fun VMapRoot() {
             label = "drawerFrost",
         )
 
+        // 非地图页的底色与光晕：日间冷雾蓝、夜间深蓝黑，跟随主题过渡
+        val pageBgTop = animateColorAsState(
+            targetValue = if (isDark) Color(0xFF0B0E13) else Color(0xFFF4F8FD),
+            animationSpec = tween(THEME_TRANSITION_MS),
+            label = "pageBgTop",
+        ).value
+        val pageBgBottom = animateColorAsState(
+            targetValue = if (isDark) Color(0xFF101520) else Color(0xFFE6EDF8),
+            animationSpec = tween(THEME_TRANSITION_MS),
+            label = "pageBgBottom",
+        ).value
+        val glowStrength by animateFloatAsState(
+            targetValue = if (isDark) 0.18f else 0.30f,
+            animationSpec = tween(THEME_TRANSITION_MS),
+            label = "pageGlow",
+        )
+
         ModalNavigationDrawer(
             drawerState = drawerState,
             scrimColor = Color.Black.copy(alpha = if (isDark) 0.30f else 0.20f),
@@ -236,20 +256,21 @@ private fun VMapRoot() {
                             .fillMaxSize()
                             .drawBehind {
                                 drawRect(
-                                    Brush.verticalGradient(
-                                        listOf(Color(0xFF0B0E13), Color(0xFF101520)),
-                                    ),
+                                    Brush.verticalGradient(listOf(pageBgTop, pageBgBottom)),
                                 )
                                 drawCircle(
                                     brush = Brush.radialGradient(
-                                        listOf(section.accent.copy(alpha = 0.18f), Color.Transparent),
+                                        listOf(section.accent.copy(alpha = glowStrength), Color.Transparent),
                                     ),
                                     radius = size.width * 0.9f,
                                     center = Offset(size.width * 0.92f, size.height * 0.04f),
                                 )
                                 drawCircle(
                                     brush = Brush.radialGradient(
-                                        listOf(section.accent.copy(alpha = 0.10f), Color.Transparent),
+                                        listOf(
+                                            section.accent.copy(alpha = glowStrength * 0.55f),
+                                            Color.Transparent,
+                                        ),
                                     ),
                                     radius = size.width * 0.85f,
                                     center = Offset(size.width * 0.04f, size.height * 0.72f),
@@ -378,10 +399,14 @@ private fun VMapDrawer(
             .then(if (wallpaperBrush != null) Modifier.background(wallpaperBrush) else Modifier)
             .then(
                 if (wallpaperBrush != null) {
-                    // 压暗一层，保证上面的白字可读
+                    // 压暗壁纸：夜间压得重（要白字可读），日间轻一点，不然整块发灰
+                    val dark = (1f - MaterialTheme.colorScheme.surface.luminance()).coerceIn(0f, 1f)
                     Modifier.background(
                         Brush.verticalGradient(
-                            listOf(Color.Black.copy(alpha = 0.56f), Color.Black.copy(alpha = 0.86f)),
+                            listOf(
+                                Color.Black.copy(alpha = 0.30f + 0.26f * dark),
+                                Color.Black.copy(alpha = 0.68f + 0.18f * dark),
+                            ),
                         ),
                     )
                 } else {
@@ -583,7 +608,11 @@ private fun DrawerNavItem(
             text = label,
             style = if (selected) {
                 TextStyle(
-                    color = if (isDark) lerp(accent, Color.White, 0.45f) else accent,
+                    color = if (isDark) {
+                        lerp(accent, Color.White, 0.45f)
+                    } else {
+                        lerp(accent, Color(0xFF08161E), 0.62f)
+                    },
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     shadow = labelShadow,

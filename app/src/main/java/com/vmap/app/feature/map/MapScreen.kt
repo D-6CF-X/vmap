@@ -1,5 +1,7 @@
 package com.vmap.app.feature.map
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -46,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vmap.app.core.geo.distanceKm
+import com.vmap.app.core.ui.THEME_TRANSITION_MS
 import com.vmap.app.core.ui.accent
 import com.vmap.app.core.ui.glassPanel
 import com.vmap.app.domain.model.Section
@@ -71,6 +74,13 @@ fun MapScreen(
 
     var detailSpot by remember { mutableStateOf<Spot?>(null) }
 
+    // 地图配色跟着主题一起过渡，不要瞬间变白/变黑
+    val darkProgress by animateFloatAsState(
+        targetValue = if (isDark) 1f else 0f,
+        animationSpec = tween(THEME_TRANSITION_MS),
+        label = "mapDarkness",
+    )
+
     Box(modifier = Modifier.fillMaxSize()) {
         ChinaMapCanvas(
             modifier = Modifier.fillMaxSize(),
@@ -82,6 +92,7 @@ fun MapScreen(
             // 有弹窗盖着时冻结动画，避免后台地图每帧重绘拖慢对话框
             animated = detailSpot == null && !dimmed,
             isDark = isDark,
+            darkProgress = darkProgress,
         )
 
         Column(
@@ -161,7 +172,12 @@ private fun SectionSwitchBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val numberColor = if (isDark) lerp(accent, Color.White, 0.15f) else accent
+        val numberColor = if (isDark) {
+            lerp(accent, Color.White, 0.15f)
+        } else {
+            // 日间的应援色在白底上太浅，压深一档才看得清
+            lerp(accent, Color(0xFF08161E), 0.55f)
+        }
         Text(
             text = buildAnnotatedString {
                 when (statPage) {
@@ -222,7 +238,11 @@ private fun SectionSwitchBar(
             ) {
                 Text(
                     text = if (showRoute) "路线开" else "路线关",
-                    color = if (showRoute) (if (isDark) lerp(accent, Color.White, 0.3f) else accent) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (showRoute) {
+                        if (isDark) lerp(accent, Color.White, 0.3f) else lerp(accent, Color(0xFF08161E), 0.58f)
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                     fontSize = 12.sp,
                     fontWeight = if (showRoute) FontWeight.Medium else FontWeight.Normal,
                 )
@@ -313,7 +333,11 @@ private fun FilterChip(
     ) {
         Text(
             text = text,
-            color = if (selected) (if (isDark) lerp(accent, Color.White, 0.25f) else accent) else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (selected) {
+                if (isDark) lerp(accent, Color.White, 0.25f) else lerp(accent, Color(0xFF08161E), 0.55f)
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
             fontSize = 12.sp,
             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
         )
