@@ -9,7 +9,8 @@ import org.json.JSONObject
 /**
  * 一个城市的形状。坐标已换算成虚拟坐标系：
  * x = (lng - 73) / 62 * 1000，y = (54 - lat) / 36 * 580。
- * [rings] 是原始坐标点（用于点选判定），[path] 用于渲染，[center] 是外接框中心（用于放城市名），
+ * [rings] 是原始坐标点（用于点选判定），[path] 用于渲染，[center] 是外接框中心，
+ * [label] 是落在多边形内部的质心（用于放城市名，避免凹形地块的字飘到形状外），
  * [bounds] 是虚拟坐标外接框（判断名字是否装得下）。
  */
 class ProvinceShape(
@@ -18,6 +19,7 @@ class ProvinceShape(
     val rings: List<List<Offset>>,
     val path: Path,
     val center: Offset,
+    val label: Offset,
     val bounds: Rect,
 ) {
     fun contains(x: Float, y: Float): Boolean =
@@ -81,7 +83,7 @@ object ChinaMapData {
                     path.close()
                 }
 
-                // 外接框中心（城市名位置）
+                // 外接框（判断名字装不装得下）
                 var minX = Float.MAX_VALUE
                 var minY = Float.MAX_VALUE
                 var maxX = -Float.MAX_VALUE
@@ -95,6 +97,14 @@ object ChinaMapData {
                     }
                 }
 
+                // 名字定位点：优先用 json 里的质心（落在形状内），缺失用外接框中心兜底
+                val centerArr = f.optJSONArray("center")
+                val label = if (centerArr != null && centerArr.length() >= 2) {
+                    Offset(lngToX(centerArr.getDouble(0)), latToY(centerArr.getDouble(1)))
+                } else {
+                    Offset((minX + maxX) / 2, (minY + maxY) / 2)
+                }
+
                 result.add(
                     ProvinceShape(
                         adcode = f.getString("adcode"),
@@ -102,6 +112,7 @@ object ChinaMapData {
                         rings = rings,
                         path = path,
                         center = Offset((minX + maxX) / 2, (minY + maxY) / 2),
+                        label = label,
                         bounds = Rect(minX, minY, maxX, maxY),
                     )
                 )

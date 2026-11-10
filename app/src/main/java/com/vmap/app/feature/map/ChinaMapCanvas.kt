@@ -240,14 +240,14 @@ fun ChinaMapCanvas(
         provinceLabels.forEach { label ->
             val layout = provinceLayouts[label.name] ?: return@forEach
             val bbox = provinceBBoxes[label.adcode] ?: return@forEach
-            drawFitted(layout, bbox, palette.label, 1.05f, ::toScreen)
+            drawFitted(layout, bbox, Offset(label.x, label.y), palette.label, 1.05f, ::toScreen)
         }
 
         // 点亮城市名：始终显示（应援色）
         provinces.forEach { p ->
             if (!visitedAdcodes.contains(p.adcode)) return@forEach
             val layout = labelLayouts[p.adcode] ?: return@forEach
-            drawFitted(layout, p.bounds, accent, 1.05f, ::toScreen)
+            drawFitted(layout, p.bounds, p.label, accent, 1.05f, ::toScreen)
         }
 
         // 未点亮城市名：放大后才显示，且要装得下
@@ -255,7 +255,7 @@ fun ChinaMapCanvas(
             provinces.forEach { p ->
                 if (visitedAdcodes.contains(p.adcode)) return@forEach
                 val layout = labelLayouts[p.adcode] ?: return@forEach
-                drawFitted(layout, p.bounds, palette.label.copy(alpha = 0.7f), 1.45f, ::toScreen)
+                drawFitted(layout, p.bounds, p.label, palette.label.copy(alpha = 0.7f), 1.45f, ::toScreen)
             }
         }
 
@@ -330,12 +330,14 @@ fun ChinaMapCanvas(
 }
 
 /**
- * 名字只有在地块的屏幕外接框里装得下才画，且位置钳在框内，保证不越界。
+ * 名字只有在地块的屏幕外接框里装得下才画。
+ * 文字中心放在 [label]（多边形内部质心），再钳制到外接框内，双保险不越界。
  * [minRatio] 宽度阈值倍数：点亮城市/省名用宽松值尽量常显，未点亮城市用严格值避免挤成一团。
  */
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawFitted(
     layout: TextLayoutResult,
     bbox: Rect,
+    label: Offset,
     color: Color,
     minRatio: Float,
     toScreen: (Float, Float) -> Offset,
@@ -347,10 +349,9 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawFitted(
     val tw = layout.size.width.toFloat()
     val th = layout.size.height.toFloat()
     if (bw < tw * minRatio || bh < th * 1.6f) return
-    val cx = (tl.x + br.x) / 2f
-    val cy = (tl.y + br.y) / 2f
-    val x = (cx - tw / 2f).coerceIn(tl.x, (br.x - tw).coerceAtLeast(tl.x))
-    val y = (cy - th / 2f).coerceIn(tl.y, (br.y - th).coerceAtLeast(tl.y))
+    val c = toScreen(label.x, label.y)
+    val x = (c.x - tw / 2f).coerceIn(tl.x, (br.x - tw).coerceAtLeast(tl.x))
+    val y = (c.y - th / 2f).coerceIn(tl.y, (br.y - th).coerceAtLeast(tl.y))
     drawText(layout, color = color, topLeft = Offset(x, y))
 }
 
