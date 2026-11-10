@@ -236,27 +236,68 @@ fun ChinaMapCanvas(
             }
         }
 
-        // 省名：始终显示（宽松阈值，位置钳在省内）
-        provinceLabels.forEach { label ->
-            val layout = provinceLayouts[label.name] ?: return@forEach
-            val bbox = provinceBBoxes[label.adcode] ?: return@forEach
-            drawFitted(layout, bbox, Offset(label.x, label.y), palette.label, 1.05f, ::toScreen)
-        }
+        // 文字避让：已占用的屏幕矩形，重叠的名字跳过（学高德的标注避让）
+        val occupied = ArrayList<Rect>()
 
-        // 点亮城市名：始终显示（应援色）
-        provinces.forEach { p ->
-            if (!visitedAdcodes.contains(p.adcode)) return@forEach
-            val layout = labelLayouts[p.adcode] ?: return@forEach
-            drawFitted(layout, p.bounds, p.label, accent, 1.05f, ::toScreen)
-        }
-
-        // 未点亮城市名：放大后才显示，且要装得下
-        if (scale >= DETAIL_ZOOM) {
-            provinces.forEach { p ->
-                if (visitedAdcodes.contains(p.adcode)) return@forEach
-                val layout = labelLayouts[p.adcode] ?: return@forEach
-                drawFitted(layout, p.bounds, p.label, palette.label.copy(alpha = 0.7f), 1.45f, ::toScreen)
+        fun tryPlace(
+            layout: TextLayoutResult,
+            labelV: Offset,
+            color: Color,
+            bbox: Rect,
+            minRatio: Float,
+        ): Boolean {
+            val tl = toScreen(bbox.left, bbox.top)
+            val br = toScreen(bbox.right, bbox.bottom)
+            val tw = layout.size.width.toFloat()
+            val th = layout.size.height.toFloat()
+            if (br.x - tl.x < tw * minRatio || br.y - tl.y < th * 1.6f) return false
+            val pad = 3f
+            val c = toScreen(labelV.x, labelV.y)
+            // 候选位置：质心优先，其次上下左右微调，学高德的多候选避让，尽量容纳更多名字
+            val step = th * 0.5f
+            val candidates = listOf(
+                c,
+                Offset(c.x, c.y - step),
+                Offset(c.x, c.y + step),
+                Offset(c.x - step, c.y),
+                Offset(c.x + step, c.y),
+            )
+            for (cc in candidates) {
+                val x = (cc.x - tw / 2f).coerceIn(tl.x, (br.x - tw).coerceAtLeast(tl.x))
+                val y = (cc.y - th / 2f).coerceIn(tl.y, (br.y - th).coerceAtLeast(tl.y))
+                val rect = Rect(x - pad, y - pad, x + tw + pad, y + th + pad)
+                if (occupied.none { it.overlaps(rect) }) {
+                    occupied.add(rect)
+                    drawText(layout, color = color, topLeft = Offset(x, y))
+                    return true
+                }
             }
+            return false
+        }
+
+        // 标注顺序：点亮城市 > 省名（按面积降序）> 未点亮城市（按面积降序），重叠自动抽稀
+        provinces.filter { visitedAdcodes.contains(it.adcode) }
+            .sortedByDescending { it.bounds.width * it.bounds.height }
+            .forEach { p ->
+                val layout = labelLayouts[p.adcode] ?: return@forEach
+                tryPlace(layout, p.label, accent, p.bounds, 1.05f)
+            }
+
+        provinceLabels
+            .sortedByDescending { provinceBBoxes[it.adcode]?.let { r -> r.width * r.height } ?: 0f }
+            .forEach { label ->
+                val layout = provinceLayouts[label.name] ?: return@forEach
+                val bbox = provinceBBoxes[label.adcode] ?: return@forEach
+                tryPlace(layout, Offset(label.x, label.y), palette.label, bbox, 1.05f)
+            }
+
+        if (scale >= DETAIL_ZOOM) {
+            provinces.filter { !visitedAdcodes.contains(it.adcode) }
+                .sortedByDescending { it.bounds.width * it.bounds.height }
+                .forEach { p ->
+                    val layout = labelLayouts[p.adcode] ?: return@forEach
+                    tryPlace(layout, p.label, palette.label.copy(alpha = 0.7f), p.bounds, 1.45f)
+                }
         }
 
         // 路线：3D 抛物线（向上拱、中间粗亮两端细淡、地面投影、飞行光点拖尾）
@@ -327,32 +368,6 @@ fun ChinaMapCanvas(
             drawCircle(accent, radius = 7.5f, center = pos)
         }
     }
-}
-
-/**
- * 名字只有在地块的屏幕外接框里装得下才画。
- * 文字中心放在 [label]（多边形内部质心），再钳制到外接框内，双保险不越界。
- * [minRatio] 宽度阈值倍数：点亮城市/省名用宽松值尽量常显，未点亮城市用严格值避免挤成一团。
- */
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawFitted(
-    layout: TextLayoutResult,
-    bbox: Rect,
-    label: Offset,
-    color: Color,
-    minRatio: Float,
-    toScreen: (Float, Float) -> Offset,
-) {
-    val tl = toScreen(bbox.left, bbox.top)
-    val br = toScreen(bbox.right, bbox.bottom)
-    val bw = br.x - tl.x
-    val bh = br.y - tl.y
-    val tw = layout.size.width.toFloat()
-    val th = layout.size.height.toFloat()
-    if (bw < tw * minRatio || bh < th * 1.6f) return
-    val c = toScreen(label.x, label.y)
-    val x = (c.x - tw / 2f).coerceIn(tl.x, (br.x - tw).coerceAtLeast(tl.x))
-    val y = (c.y - th / 2f).coerceIn(tl.y, (br.y - th).coerceAtLeast(tl.y))
-    drawText(layout, color = color, topLeft = Offset(x, y))
 }
 
 /** 二次贝塞尔曲线上的点。 */
