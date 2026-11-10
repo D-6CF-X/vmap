@@ -18,7 +18,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
@@ -125,6 +127,22 @@ fun ChinaMapCanvas(
             p.adcode to textMeasurer.measure(
                 text = AnnotatedString(p.name),
                 style = TextStyle(fontSize = 9.sp),
+                constraints = Constraints(maxWidth = 200),
+            )
+        }
+    }
+
+    // 点亮城市名：应援色渐变（白→accent），立体霓虹感
+    val litLabelLayouts = remember(provinces, accent) {
+        provinces.associate { p ->
+            p.adcode to textMeasurer.measure(
+                text = AnnotatedString(p.name),
+                style = TextStyle(
+                    brush = Brush.verticalGradient(
+                        listOf(Color.White, accent, accent.copy(alpha = 0.85f)),
+                    ),
+                    fontSize = 9.sp,
+                ),
                 constraints = Constraints(maxWidth = 200),
             )
         }
@@ -246,6 +264,7 @@ fun ChinaMapCanvas(
             bbox: Rect,
             minRatio: Float,
             outline: Color? = null,
+            shadow: Shadow? = null,
         ): Boolean {
             val tl = toScreen(bbox.left, bbox.top)
             val br = toScreen(bbox.right, bbox.bottom)
@@ -264,18 +283,28 @@ fun ChinaMapCanvas(
             if (outline != null) {
                 drawText(layout, color = outline, topLeft = Offset(x, y), drawStyle = Stroke(width = 3f))
             }
-            drawText(layout, color = color, topLeft = Offset(x, y))
+            drawText(layout, color = color, topLeft = Offset(x, y), shadow = shadow)
             return true
         }
 
         // 学高德：省名和城市名互斥——缩小看省，放大看城。
         // 点亮城市名是用户自己的数据，两种视图都显示，加描边提高可读性。
         val litOutline = if (isDark) Color.White else Color(0xFF1A1D22)
+        val litShadow = Shadow(
+            color = accent.copy(alpha = 0.55f),
+            offset = Offset(0f, 1.5f),
+            blurRadius = 5f,
+        )
+        val plainShadow = Shadow(
+            color = Color.Black.copy(alpha = if (isDark) 0.5f else 0.25f),
+            offset = Offset(0f, 1.5f),
+            blurRadius = 4f,
+        )
         provinces.filter { visitedAdcodes.contains(it.adcode) }
             .sortedByDescending { it.bounds.width * it.bounds.height }
             .forEach { p ->
-                val layout = labelLayouts[p.adcode] ?: return@forEach
-                tryPlace(layout, p.label, accent, p.bounds, 1.05f, outline = litOutline)
+                val layout = litLabelLayouts[p.adcode] ?: return@forEach
+                tryPlace(layout, p.label, accent, p.bounds, 1.05f, outline = litOutline, shadow = litShadow)
             }
 
         if (scale < DETAIL_ZOOM) {
@@ -284,14 +313,14 @@ fun ChinaMapCanvas(
                 .forEach { label ->
                     val layout = provinceLayouts[label.name] ?: return@forEach
                     val bbox = provinceBBoxes[label.adcode] ?: return@forEach
-                    tryPlace(layout, Offset(label.x, label.y), palette.label, bbox, 1.05f)
+                    tryPlace(layout, Offset(label.x, label.y), palette.label, bbox, 1.05f, shadow = plainShadow)
                 }
         } else {
             provinces.filter { !visitedAdcodes.contains(it.adcode) }
                 .sortedByDescending { it.bounds.width * it.bounds.height }
                 .forEach { p ->
                     val layout = labelLayouts[p.adcode] ?: return@forEach
-                    tryPlace(layout, p.label, palette.label.copy(alpha = 0.7f), p.bounds, 1.45f)
+                    tryPlace(layout, p.label, palette.label.copy(alpha = 0.7f), p.bounds, 1.45f, shadow = plainShadow)
                 }
         }
 
