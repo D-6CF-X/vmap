@@ -21,6 +21,10 @@ interface SpotDao {
     )
     fun observeBySection(section: Section): Flow<List<Spot>>
 
+    /** 全部打卡（不分板块），成就/年度回顾统计用。 */
+    @Query("SELECT * FROM spots WHERE deleted = 0 ORDER BY performedAt ASC")
+    fun observeAll(): Flow<List<Spot>>
+
     /** 时间线用：按时间正序，用来连接路线、判断箭头方向。 */
     @Query(
         """
@@ -30,6 +34,28 @@ interface SpotDao {
         """
     )
     fun observeChronological(section: Section): Flow<List<Spot>>
+
+    /** 按标签筛选某个板块的打卡（时间倒序）。 */
+    @Query(
+        """
+        SELECT spots.* FROM spots
+        INNER JOIN spot_tags ON spots.id = spot_tags.spotId
+        WHERE spot_tags.tagId = :tagId AND spots.deleted = 0 AND spots.section = :section
+        ORDER BY spots.performedAt DESC
+        """
+    )
+    fun observeByTag(section: Section, tagId: String): Flow<List<Spot>>
+
+    /** 按标签筛选（时间正序，路线连线用）。 */
+    @Query(
+        """
+        SELECT spots.* FROM spots
+        INNER JOIN spot_tags ON spots.id = spot_tags.spotId
+        WHERE spot_tags.tagId = :tagId AND spots.deleted = 0 AND spots.section = :section
+        ORDER BY spots.performedAt ASC
+        """
+    )
+    fun observeByTagChronological(section: Section, tagId: String): Flow<List<Spot>>
 
     /** 已点亮的行政区编码去重集合。点亮进度直接从打卡数据聚合，不另设表。 */
     @Query(

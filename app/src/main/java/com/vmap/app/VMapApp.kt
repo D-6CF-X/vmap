@@ -26,7 +26,7 @@ class AppContainer(context: Context) {
     private val database: VMapDatabase = VMapDatabase.build(context)
 
     val spotRepository: SpotRepository =
-        SpotRepositoryImpl(database.spotDao(), database.photoDao())
+        SpotRepositoryImpl(database.spotDao(), database.photoDao(), database.tagDao())
 
     val photoStore: PhotoStore = PhotoStore(context)
 }

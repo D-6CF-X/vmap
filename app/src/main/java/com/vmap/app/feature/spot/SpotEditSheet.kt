@@ -7,6 +7,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -17,7 +19,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -52,6 +56,7 @@ import coil.compose.AsyncImage
 import com.vmap.app.VMapApp
 import com.vmap.app.core.ui.accent
 import com.vmap.app.domain.model.Spot
+import com.vmap.app.domain.model.Tag
 import com.vmap.app.feature.map.MapViewModel
 import kotlinx.coroutines.launch
 import java.io.File
@@ -59,7 +64,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SpotEditSheet(
     spot: Spot,
@@ -80,9 +85,18 @@ fun SpotEditSheet(
     var performedAt by remember(spot) { mutableStateOf(spot.performedAt) }
     var showDatePicker by remember { mutableStateOf(false) }
     var importing by remember { mutableStateOf(false) }
+    var showNewTag by remember { mutableStateOf(false) }
 
     val photos by app.container.spotRepository
         .observePhotos(spot.id)
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+
+    val allTags by app.container.spotRepository
+        .observeTags()
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+
+    val spotTags by app.container.spotRepository
+        .observeTagsOfSpot(spot.id)
         .collectAsStateWithLifecycle(initialValue = emptyList())
 
     val picker = rememberLauncherForActivityResult(
@@ -208,6 +222,45 @@ fun SpotEditSheet(
 
             Spacer(Modifier.height(14.dp))
 
+            // 标签：点选打上/取消，末尾是新建入口
+            Text(
+                text = "标签",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+            )
+            Spacer(Modifier.height(6.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                allTags.forEach { tag ->
+                    val selected = spotTags.any { it.id == tag.id }
+                    TagChip(tag = tag, selected = selected, onClick = {
+                        scope.launch {
+                            if (selected) {
+                                app.container.spotRepository.removeTag(spot.id, tag.id)
+                            } else {
+                                app.container.spotRepository.assignTag(spot.id, tag.id)
+                            }
+                        }
+                    })
+                }
+                Surface(
+                    onClick = { showNewTag = true },
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                ) {
+                    Text(
+                        text = "+ 新建",
+                        color = accent,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
+
             if (photos.isEmpty() && !importing) {
                 Text(
                     text = "还没有照片",
@@ -314,4 +367,61 @@ fun SpotEditSheet(
             DatePicker(state = dateState)
         }
     }
+
+    if (showNewTag) {
+        var newName by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showNewTag = false },
+            title = { Text("新建标签") },
+            text = {
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    label = { Text("标签名") },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (newName.isNotBlank()) {
+                        scope.launch {
+                            val color = TAG_COLORS[allTags.size % TAG_COLORS.size]
+                            val tag = app.container.spotRepository.addTag(newName, color)
+                            app.container.spotRepository.assignTag(spot.id, tag.id)
+                            showNewTag = false
+                        }
+                    }
+                }) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewTag = false }) { Text("取消") }
+            },
+        )
+    }
 }
+
+@Composable
+private fun TagChip(
+    tag: Tag,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = if (selected) Color(tag.color).copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceVariant,
+    ) {
+        Text(
+            text = tag.name,
+            color = if (selected) Color(tag.color) else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp,
+            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+        )
+    }
+}
+
+/** 新建标签时循环分配的预设色。 */
+private val TAG_COLORS = listOf(
+    0xFF66CCFF, 0xFF39C5BB, 0xFFFFB74D, 0xFFE57373, 0xFFBA68C8, 0xFF81C784,
+)

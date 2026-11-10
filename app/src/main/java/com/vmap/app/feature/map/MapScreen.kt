@@ -3,12 +3,15 @@ package com.vmap.app.feature.map
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -35,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vmap.app.core.ui.accent
 import com.vmap.app.domain.model.Section
 import com.vmap.app.domain.model.Spot
+import com.vmap.app.domain.model.Tag
 import com.vmap.app.domain.repository.SectionStats
 import com.vmap.app.feature.spot.SpotEditSheet
 
@@ -50,6 +54,8 @@ fun MapScreen(
     val stats by viewModel.stats.collectAsStateWithLifecycle()
     val showRoute by viewModel.showRoute.collectAsStateWithLifecycle()
     val isDark by viewModel.isDark.collectAsStateWithLifecycle()
+    val tags by viewModel.tags.collectAsStateWithLifecycle()
+    val filterTag by viewModel.filterTag.collectAsStateWithLifecycle()
 
     var detailSpot by remember { mutableStateOf<Spot?>(null) }
 
@@ -70,7 +76,7 @@ fun MapScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
-                .padding(top = 48.dp),
+                .padding(top = 84.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SectionSwitchBar(
@@ -82,6 +88,14 @@ fun MapScreen(
                 showRoute = showRoute,
                 isDark = isDark,
             )
+
+            if (tags.isNotEmpty()) {
+                TagFilterBar(
+                    tags = tags,
+                    filterTag = filterTag,
+                    onSelect = viewModel::setFilterTag,
+                )
+            }
         }
 
         ExtendedFloatingActionButton(
@@ -201,6 +215,63 @@ private fun SectionChip(
             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
             modifier = Modifier.padding(vertical = 10.dp),
             textAlign = TextAlign.Center,
+        )
+    }
+}
+
+/** 标签筛选栏：横向滚动的 chips，「全部」+ 每个标签。 */
+@Composable
+private fun TagFilterBar(
+    tags: List<Tag>,
+    filterTag: String?,
+    onSelect: (String?) -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+        shape = MaterialTheme.shapes.large,
+    ) {
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            item {
+                FilterChip(
+                    text = "全部",
+                    selected = filterTag == null,
+                    accent = MaterialTheme.colorScheme.onSurface,
+                    onClick = { onSelect(null) },
+                )
+            }
+            items(tags, key = { it.id }) { tag ->
+                FilterChip(
+                    text = tag.name,
+                    selected = filterTag == tag.id,
+                    accent = Color(tag.color),
+                    onClick = { onSelect(tag.id) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterChip(
+    text: String,
+    selected: Boolean,
+    accent: Color,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = if (selected) accent.copy(alpha = 0.20f) else MaterialTheme.colorScheme.surfaceVariant,
+    ) {
+        Text(
+            text = text,
+            color = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp,
+            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
         )
     }
 }
