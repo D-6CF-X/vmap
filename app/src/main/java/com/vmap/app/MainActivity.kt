@@ -88,7 +88,7 @@ private fun VMapRoot() {
 
             NavigationBar(
                 modifier = Modifier.align(Alignment.BottomCenter),
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
             ) {
                 Tab.entries.forEachIndexed { index, item ->
                     NavigationBarItem(

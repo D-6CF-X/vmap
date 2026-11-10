@@ -245,6 +245,7 @@ fun ChinaMapCanvas(
             color: Color,
             bbox: Rect,
             minRatio: Float,
+            outline: Color? = null,
         ): Boolean {
             val tl = toScreen(bbox.left, bbox.top)
             val br = toScreen(bbox.right, bbox.bottom)
@@ -259,17 +260,22 @@ fun ChinaMapCanvas(
             val rect = Rect(x - pad, y - pad, x + tw + pad, y + th + pad)
             if (occupied.any { it.overlaps(rect) }) return false
             occupied.add(rect)
+            // 描边层（白边/深边），让应援色文字在复杂背景上更清晰
+            if (outline != null) {
+                drawText(layout, color = outline, topLeft = Offset(x, y), drawStyle = Stroke(width = 3f))
+            }
             drawText(layout, color = color, topLeft = Offset(x, y))
             return true
         }
 
         // 学高德：省名和城市名互斥——缩小看省，放大看城。
-        // 点亮城市名是用户自己的数据，两种视图都显示。
+        // 点亮城市名是用户自己的数据，两种视图都显示，加描边提高可读性。
+        val litOutline = if (isDark) Color.White else Color(0xFF1A1D22)
         provinces.filter { visitedAdcodes.contains(it.adcode) }
             .sortedByDescending { it.bounds.width * it.bounds.height }
             .forEach { p ->
                 val layout = labelLayouts[p.adcode] ?: return@forEach
-                tryPlace(layout, p.label, accent, p.bounds, 1.05f)
+                tryPlace(layout, p.label, accent, p.bounds, 1.05f, outline = litOutline)
             }
 
         if (scale < DETAIL_ZOOM) {

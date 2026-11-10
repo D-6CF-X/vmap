@@ -117,7 +117,7 @@ private fun SectionSwitchBar(
     isDark: Boolean,
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
         shape = MaterialTheme.shapes.large,
         tonalElevation = 3.dp,
     ) {

@@ -126,7 +126,7 @@ private fun TimelineNode(
 
         // 右侧卡片
         Surface(
-            color = MaterialTheme.colorScheme.surface,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
             shape = MaterialTheme.shapes.large,
             modifier = Modifier
                 .weight(1f)
