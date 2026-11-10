@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -105,9 +106,11 @@ private fun VMapRoot() {
 
         ModalNavigationDrawer(
             drawerState = drawerState,
+            scrimColor = Color.Black.copy(alpha = 0.15f),
             drawerContent = {
                 ModalDrawerSheet(
-                    drawerContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                    modifier = Modifier.width(300.dp),
+                    drawerContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(

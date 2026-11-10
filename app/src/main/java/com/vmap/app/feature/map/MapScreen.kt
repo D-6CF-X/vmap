@@ -80,9 +80,8 @@ fun MapScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SectionSwitchBar(
-                section = section,
+                accent = section.accent,
                 stats = stats,
-                onSelect = viewModel::selectSection,
                 onToggleRoute = viewModel::toggleRoute,
                 onToggleTheme = viewModel::toggleTheme,
                 showRoute = showRoute,
@@ -122,9 +121,8 @@ fun MapScreen(
 
 @Composable
 private fun SectionSwitchBar(
-    section: Section,
+    accent: Color,
     stats: SectionStats,
-    onSelect: (Section) -> Unit,
     onToggleRoute: () -> Unit,
     onToggleTheme: () -> Unit,
     showRoute: Boolean,
@@ -135,87 +133,45 @@ private fun SectionSwitchBar(
         shape = MaterialTheme.shapes.large,
         tonalElevation = 3.dp,
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "已点亮 ${stats.cityCount} 座城市 · ${stats.spotCount} 场演出",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionChip(
-                    label = "依你随行",
-                    selected = section == Section.TIANYI,
-                    accent = Section.TIANYI.accent,
-                    onClick = { onSelect(Section.TIANYI) },
-                    modifier = Modifier.weight(1f),
-                )
-                SectionChip(
-                    label = "因音而遇",
-                    selected = section == Section.MIKU,
-                    accent = Section.MIKU.accent,
-                    onClick = { onSelect(Section.MIKU) },
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            Spacer(Modifier.height(10.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "已点亮 ${stats.cityCount} 座城市 · ${stats.spotCount} 场演出",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Surface(
-                        onClick = onToggleRoute,
-                        shape = CircleShape,
-                        color = if (showRoute) section.accent.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant,
-                    ) {
-                        Text(
-                            text = if (showRoute) "路线开" else "路线关",
-                            color = if (showRoute) section.accent else MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        )
-                    }
-                    Surface(
-                        onClick = onToggleTheme,
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                    ) {
-                        Icon(
-                            imageVector = if (isDark) Icons.Filled.LightMode else Icons.Filled.DarkMode,
-                            contentDescription = if (isDark) "切到白天" else "切到夜间",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(8.dp),
-                        )
-                    }
+                Surface(
+                    onClick = onToggleRoute,
+                    shape = CircleShape,
+                    color = if (showRoute) accent.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant,
+                ) {
+                    Text(
+                        text = if (showRoute) "路线开" else "路线关",
+                        color = if (showRoute) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                }
+                Surface(
+                    onClick = onToggleTheme,
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                ) {
+                    Icon(
+                        imageVector = if (isDark) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                        contentDescription = if (isDark) "切到白天" else "切到夜间",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(8.dp),
+                    )
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun SectionChip(
-    label: String,
-    selected: Boolean,
-    accent: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier,
-        shape = MaterialTheme.shapes.medium,
-        color = if (selected) accent.copy(alpha = 0.20f) else MaterialTheme.colorScheme.surfaceVariant,
-    ) {
-        Text(
-            text = label,
-            color = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 14.sp,
-            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-            modifier = Modifier.padding(vertical = 10.dp),
-            textAlign = TextAlign.Center,
-        )
     }
 }
 
