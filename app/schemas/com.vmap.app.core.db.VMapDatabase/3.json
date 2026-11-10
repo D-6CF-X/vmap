@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 3,
-    "identityHash": "f2828591b2e5685f4ace68137a251183",
+    "identityHash": "7ea2892e4a43ae644bfbdb2027a92bd0",
     "entities": [
       {
         "tableName": "spots",
@@ -279,7 +279,7 @@
       },
       {
         "tableName": "songs",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `artist` TEXT NOT NULL, `plays` INTEGER NOT NULL, `ratingId` TEXT NOT NULL, `orderIndex` INTEGER NOT NULL, `source` TEXT NOT NULL, `externalId` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `artist` TEXT NOT NULL, `plays` INTEGER NOT NULL, `ratingId` TEXT NOT NULL, `orderIndex` INTEGER NOT NULL, `source` TEXT NOT NULL, `externalId` TEXT NOT NULL, `coverPath` TEXT NOT NULL, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -328,6 +328,12 @@
             "columnName": "externalId",
             "affinity": "TEXT",
             "notNull": true
+          },
+          {
+            "fieldPath": "coverPath",
+            "columnName": "coverPath",
+            "affinity": "TEXT",
+            "notNull": true
           }
         ],
         "primaryKey": {
@@ -343,7 +349,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f2828591b2e5685f4ace68137a251183')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '7ea2892e4a43ae644bfbdb2027a92bd0')"
     ]
   }
 }

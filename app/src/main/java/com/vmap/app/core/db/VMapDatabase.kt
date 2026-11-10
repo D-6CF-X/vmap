@@ -21,7 +21,7 @@ import com.vmap.app.domain.model.Tag
 
 @Database(
     entities = [Spot::class, Photo::class, Tag::class, SpotTag::class, SongRating::class, Song::class],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -57,9 +57,16 @@ abstract class VMapDatabase : RoomDatabase() {
             }
         }
 
+        /** v3 → v4：歌曲加曲绘路径，只加列，不动旧数据。 */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `songs` ADD COLUMN `coverPath` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun build(context: Context): VMapDatabase =
             Room.databaseBuilder(context, VMapDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_2_3)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
                 // 兜底：将来再加表时如果忘了写 Migration，宁可清库也别崩
                 .fallbackToDestructiveMigration()
                 .build()

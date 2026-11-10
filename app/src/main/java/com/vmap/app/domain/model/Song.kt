@@ -32,4 +32,6 @@ data class Song(
     val source: String = "manual",
     /** 平台内的歌曲 id，导入去重用。 */
     val externalId: String = "",
+    /** 曲绘 / 封面的相对路径（相对 filesDir），空表示还没上图。 */
+    val coverPath: String = "",
 )

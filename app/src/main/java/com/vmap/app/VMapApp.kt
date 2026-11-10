@@ -5,6 +5,7 @@ import android.content.Context
 import com.vmap.app.core.db.VMapDatabase
 import com.vmap.app.data.photo.PhotoStore
 import com.vmap.app.data.repository.SpotRepositoryImpl
+import com.vmap.app.data.song.CoverStore
 import com.vmap.app.domain.repository.SpotRepository
 
 class VMapApp : Application() {
@@ -29,6 +30,8 @@ class AppContainer(context: Context) {
         SpotRepositoryImpl(database.spotDao(), database.photoDao(), database.tagDao())
 
     val songDao = database.songDao()
+
+    val coverStore: CoverStore = CoverStore(context)
 
     val photoStore: PhotoStore = PhotoStore(context)
 }

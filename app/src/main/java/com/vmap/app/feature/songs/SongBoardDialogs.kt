@@ -1,5 +1,9 @@
 package com.vmap.app.feature.songs
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,6 +14,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -37,12 +42,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.vmap.app.domain.model.Song
 import com.vmap.app.domain.model.SongRating
+import java.io.File
 
 /** 评级可选的颜色，够用就好，不做完整取色器。 */
 private val RATING_COLORS = listOf(
@@ -50,7 +59,7 @@ private val RATING_COLORS = listOf(
     0xFFB48BFF, 0xFF8E9BAA, 0xFF7ED957,
 )
 
-/** 新增 / 编辑一首歌。 */
+/** 新增 / 编辑一首歌。曲绘可以从相册选，也可以随时移除。 */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SongEditDialog(
@@ -58,9 +67,17 @@ fun SongEditDialog(
     ratings: List<SongRating>,
     accent: Color,
     onDismiss: () -> Unit,
-    onSave: (title: String, artist: String, plays: Int, ratingId: String) -> Unit,
+    onSave: (
+        title: String,
+        artist: String,
+        plays: Int,
+        ratingId: String,
+        coverUri: Uri?,
+        removeCover: Boolean,
+    ) -> Unit,
     onDelete: (() -> Unit)?,
 ) {
+    val context = LocalContext.current
     var title by remember(song) { mutableStateOf(song?.title.orEmpty()) }
     var artist by remember(song) { mutableStateOf(song?.artist.orEmpty()) }
     var plays by remember(song) {
@@ -69,12 +86,88 @@ fun SongEditDialog(
     var ratingId by remember(song, ratings) {
         mutableStateOf(song?.ratingId ?: ratings.firstOrNull()?.id.orEmpty())
     }
+    var pickedCover by remember(song) { mutableStateOf<Uri?>(null) }
+    var removeCover by remember(song) { mutableStateOf(false) }
+
+    val coverPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri != null) {
+            pickedCover = uri
+            removeCover = false
+        }
+    }
+
+    val existingPath = song?.coverPath.orEmpty()
+    val coverModel: Any? = when {
+        pickedCover != null -> pickedCover
+        removeCover -> null
+        existingPath.isNotBlank() -> File(context.filesDir, existingPath)
+        else -> null
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (song == null) "添加歌曲" else "编辑歌曲", fontSize = 16.sp) },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                // 曲绘：点击直接换图
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(84.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(accent.copy(alpha = 0.12f))
+                            .border(1.dp, accent.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+                            .clickable {
+                                coverPicker.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                                )
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (coverModel != null) {
+                            AsyncImage(
+                                model = coverModel,
+                                contentDescription = "曲绘",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        } else {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("＋", fontSize = 20.sp, color = accent)
+                                Text("曲绘", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = if (coverModel == null) "选一张曲绘 / 封面" else "点图可更换",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "方形或竖向图效果最好",
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (coverModel != null) {
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = "移除曲绘",
+                                fontSize = 11.sp,
+                                color = Color(0xFFE05561),
+                                modifier = Modifier.clickable {
+                                    pickedCover = null
+                                    removeCover = true
+                                },
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -118,7 +211,16 @@ fun SongEditDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onSave(title.trim(), artist.trim(), plays.toIntOrNull() ?: 0, ratingId) },
+                onClick = {
+                    onSave(
+                        title.trim(),
+                        artist.trim(),
+                        plays.toIntOrNull() ?: 0,
+                        ratingId,
+                        pickedCover,
+                        removeCover,
+                    )
+                },
                 enabled = title.isNotBlank() && ratingId.isNotBlank(),
             ) { Text("保存") }
         },

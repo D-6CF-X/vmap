@@ -2,7 +2,10 @@ package com.vmap.app.feature.songs
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.compose.ui.graphics.ImageBitmap
+import android.net.Uri
 import com.vmap.app.data.db.SongDao
+import com.vmap.app.data.song.CoverStore
 import com.vmap.app.domain.model.Song
 import com.vmap.app.domain.model.SongRating
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,7 +22,10 @@ data class ImportResult(val added: Int, val skipped: Int)
  * 排序全部落库成 [Song.orderIndex]（组内递增），所以重进应用顺序不变；
  * 拖动过程中每次跨越一格就写一次库，频率不高，换来的是列表能立刻跟上手指。
  */
-class SongBoardViewModel(private val dao: SongDao) : ViewModel() {
+class SongBoardViewModel(
+    private val dao: SongDao,
+    private val coverStore: CoverStore,
+) : ViewModel() {
 
     val ratings: StateFlow<List<SongRating>> = dao.observeRatings()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -64,28 +70,69 @@ class SongBoardViewModel(private val dao: SongDao) : ViewModel() {
         }
     }
 
-    fun addSong(title: String, artist: String, plays: Int, ratingId: String) {
+    fun addSong(
+        title: String,
+        artist: String,
+        plays: Int,
+        ratingId: String,
+        coverUri: Uri? = null,
+    ) {
         if (title.isBlank() || ratingId.isBlank()) return
         viewModelScope.launch {
             val next = (dao.maxOrderOf(ratingId) ?: -1) + 1
+            val song = Song(
+                title = title.trim(),
+                artist = artist.trim(),
+                plays = plays.coerceAtLeast(0),
+                ratingId = ratingId,
+                orderIndex = next,
+            )
+            val cover = coverUri?.let { coverStore.import(it, song.id) }.orEmpty()
+            dao.upsertSong(song.copy(coverPath = cover))
+        }
+    }
+
+    /** 编辑：换封面、删封面、或者什么都不动，都在这里收口。 */
+    fun updateSong(
+        song: Song,
+        title: String,
+        artist: String,
+        plays: Int,
+        ratingId: String,
+        coverUri: Uri? = null,
+        removeCover: Boolean = false,
+    ) {
+        if (title.isBlank() || ratingId.isBlank()) return
+        viewModelScope.launch {
+            val coverPath = when {
+                coverUri != null -> coverStore.import(coverUri, song.id) ?: song.coverPath
+                removeCover -> {
+                    coverStore.delete(song.coverPath)
+                    ""
+                }
+
+                else -> song.coverPath
+            }
             dao.upsertSong(
-                Song(
+                song.copy(
                     title = title.trim(),
                     artist = artist.trim(),
                     plays = plays.coerceAtLeast(0),
                     ratingId = ratingId,
-                    orderIndex = next,
+                    coverPath = coverPath,
                 ),
             )
         }
     }
 
-    fun updateSong(song: Song) {
-        viewModelScope.launch { dao.upsertSong(song) }
-    }
+    /** 卡片上的封面：解码放到 IO 线程，由界面侧 produceState 调。 */
+    suspend fun loadCover(coverPath: String): ImageBitmap? = coverStore.load(coverPath)
 
     fun deleteSong(song: Song) {
-        viewModelScope.launch { dao.deleteSong(song.id) }
+        viewModelScope.launch {
+            coverStore.delete(song.coverPath)
+            dao.deleteSong(song.id)
+        }
     }
 
     /**

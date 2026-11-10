@@ -150,7 +150,7 @@ private fun VMapRoot() {
 
     val songViewModel: SongBoardViewModel = viewModel(
         factory = viewModelFactory {
-            initializer { SongBoardViewModel(app.container.songDao) }
+            initializer { SongBoardViewModel(app.container.songDao, app.container.coverStore) }
         },
     )
 
