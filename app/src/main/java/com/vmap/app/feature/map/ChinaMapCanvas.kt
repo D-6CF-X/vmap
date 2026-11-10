@@ -24,12 +24,14 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.sp
@@ -132,18 +134,17 @@ fun ChinaMapCanvas(
         }
     }
 
-    // 点亮城市名：应援色渐变（白→accent），立体霓虹感
-    val litLabelLayouts = remember(provinces, accent) {
+    // 点亮城市名：比普通标注更大更粗，填充渐变在绘制时按字高生成（见 tryPlace 的 emboss 分支）
+    val litLabelLayouts = remember(provinces) {
         provinces.associate { p ->
             p.adcode to textMeasurer.measure(
                 text = AnnotatedString(p.name),
                 style = TextStyle(
-                    brush = Brush.verticalGradient(
-                        listOf(Color.White, accent, accent.copy(alpha = 0.85f)),
-                    ),
-                    fontSize = 9.sp,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.4.sp,
                 ),
-                constraints = Constraints(maxWidth = 200),
+                constraints = Constraints(maxWidth = 220),
             )
         }
     }
@@ -226,6 +227,14 @@ fun ChinaMapCanvas(
                 scale(k, k, pivot = Offset.Zero)
             }) {
                 drawPath(p.path, color = fill)
+                if (visited) {
+                    // 亮边：点亮地块像一块有厚度的亚克力，而不是扁平色块
+                    drawPath(
+                        p.path,
+                        color = lerp(accent, Color.White, 0.58f).copy(alpha = 0.6f),
+                        style = Stroke(width = 1.1f / k),
+                    )
+                }
                 if (p.adcode == selectedAdcode) {
                     drawPath(p.path, color = accent, style = Stroke(width = 2.5f / k))
                 }
@@ -257,6 +266,7 @@ fun ChinaMapCanvas(
         // 文字避让：已占用的屏幕矩形，重叠的名字跳过（学高德的标注避让）
         val occupied = ArrayList<Rect>()
 
+        /** 按顺序尝试几个位置，返回是否放成功。点亮城市名（emboss）放宽约束：地块太小也优先显示。 */
         fun tryPlace(
             layout: TextLayoutResult,
             labelV: Offset,
@@ -265,20 +275,75 @@ fun ChinaMapCanvas(
             minRatio: Float,
             outline: Color? = null,
             shadow: Shadow? = null,
+            emboss: Emboss? = null,
         ): Boolean {
-            val tl = toScreen(bbox.left, bbox.top)
-            val br = toScreen(bbox.right, bbox.bottom)
             val tw = layout.size.width.toFloat()
             val th = layout.size.height.toFloat()
-            if (br.x - tl.x < tw * minRatio || br.y - tl.y < th * 1.6f) return false
-            val pad = 3f
             val c = toScreen(labelV.x, labelV.y)
-            // 单一位置：质心放不下就跳过。高德的字很稀疏，不为塞名字做偏移。
-            val x = (c.x - tw / 2f).coerceIn(tl.x, (br.x - tw).coerceAtLeast(tl.x))
-            val y = (c.y - th / 2f).coerceIn(tl.y, (br.y - th).coerceAtLeast(tl.y))
-            val rect = Rect(x - pad, y - pad, x + tw + pad, y + th + pad)
-            if (occupied.any { it.overlaps(rect) }) return false
-            occupied.add(rect)
+
+            // 候选位置：地块内居中（严格）→ 点位上方 → 点位下方 → 点位居中
+            val candidates = ArrayList<Offset>(4)
+            val tl = toScreen(bbox.left, bbox.top)
+            val br = toScreen(bbox.right, bbox.bottom)
+            val fits = br.x - tl.x >= tw * minRatio && br.y - tl.y >= th * 1.6f
+            if (fits) {
+                candidates.add(
+                    Offset(
+                        (c.x - tw / 2f).coerceIn(tl.x, (br.x - tw).coerceAtLeast(tl.x)),
+                        (c.y - th / 2f).coerceIn(tl.y, (br.y - th).coerceAtLeast(tl.y)),
+                    ),
+                )
+            }
+            if (!fits || emboss != null) {
+                candidates.add(Offset(c.x - tw / 2f, c.y - th - 9f))
+                candidates.add(Offset(c.x - tw / 2f, c.y + 12f))
+                candidates.add(Offset(c.x - tw / 2f, c.y - th / 2f))
+            }
+
+            var placed: Offset? = null
+            for (p in candidates) {
+                val x = p.x.coerceIn(6f, (size.width - tw - 6f).coerceAtLeast(6f))
+                val y = p.y.coerceIn(6f, (size.height - th - 6f).coerceAtLeast(6f))
+                val rect = Rect(x - 2f, y - 2f, x + tw + 2f, y + th + 2f)
+                if (occupied.none { it.overlaps(rect) }) {
+                    occupied.add(rect)
+                    placed = Offset(x, y)
+                    break
+                }
+            }
+            val spot = placed ?: return false
+            val x = spot.x
+            val y = spot.y
+
+            if (emboss != null) {
+                // 立体招牌字：外发光 → 挤出厚度（向下堆叠）→ 渐变字面 → 顶部高光
+                drawText(
+                    layout,
+                    color = emboss.glow.copy(alpha = 0.26f),
+                    topLeft = Offset(x, y),
+                    shadow = Shadow(emboss.glow.copy(alpha = 0.75f), Offset(0f, 0f), 6f),
+                )
+                val step = (th / 26f).coerceIn(0.8f, 1.8f)
+                for (i in 2 downTo 1) {
+                    drawText(layout, color = emboss.depth, topLeft = Offset(x, y + step * i))
+                }
+                drawText(
+                    layout,
+                    brush = Brush.verticalGradient(emboss.fillColors, startY = 0f, endY = th),
+                    topLeft = Offset(x, y),
+                )
+                drawText(
+                    layout,
+                    brush = Brush.verticalGradient(
+                        0f to Color.White.copy(alpha = 0.24f),
+                        0.5f to Color.Transparent,
+                        startY = 0f,
+                        endY = th,
+                    ),
+                    topLeft = Offset(x, y),
+                )
+                return true
+            }
             // 描边层（白边/深边），让应援色文字在复杂背景上更清晰
             if (outline != null) {
                 drawText(layout, color = outline, topLeft = Offset(x, y), drawStyle = Stroke(width = 3f))
@@ -288,12 +353,16 @@ fun ChinaMapCanvas(
         }
 
         // 学高德：省名和城市名互斥——缩小看省，放大看城。
-        // 点亮城市名是用户自己的数据，两种视图都显示，加描边提高可读性。
-        val litOutline = if (isDark) Color.White else Color(0xFF1A1D22)
-        val litShadow = Shadow(
-            color = accent.copy(alpha = 0.55f),
-            offset = Offset(0f, 1.5f),
-            blurRadius = 5f,
+        // 点亮城市名是用户自己的数据，两种视图都显示，做成立体招牌字。
+        val litEmboss = Emboss(
+            fillColors = listOf(
+                Color(0xFFFBFEFF),
+                lerp(accent, Color.White, 0.78f),
+                lerp(accent, Color.White, 0.34f),
+                accent,
+            ),
+            depth = if (isDark) lerp(accent, Color(0xFF06131C), 0.74f) else lerp(accent, Color.Black, 0.62f),
+            glow = lerp(accent, Color.White, 0.22f),
         )
         val plainShadow = Shadow(
             color = Color.Black.copy(alpha = if (isDark) 0.5f else 0.25f),
@@ -304,7 +373,7 @@ fun ChinaMapCanvas(
             .sortedByDescending { it.bounds.width * it.bounds.height }
             .forEach { p ->
                 val layout = litLabelLayouts[p.adcode] ?: return@forEach
-                tryPlace(layout, p.label, accent, p.bounds, 1.05f, outline = litOutline, shadow = litShadow)
+                tryPlace(layout, p.label, accent, p.bounds, 0.92f, emboss = litEmboss)
             }
 
         if (scale < DETAIL_ZOOM) {
@@ -382,6 +451,17 @@ fun ChinaMapCanvas(
 
             val pulse = (flow + index.toFloat() / (spots.size.coerceAtLeast(1))) % 1f
 
+            // 城市底部柔光：地块小的时候也能看出这里被点亮
+            drawCircle(
+                brush = Brush.radialGradient(
+                    0f to accent.copy(alpha = 0.30f),
+                    1f to Color.Transparent,
+                    center = pos,
+                    radius = 30f,
+                ),
+                radius = 30f,
+                center = pos,
+            )
             drawCircle(palette.shadow, radius = 11f, center = pos + Offset(0f, 3f))
             drawCircle(
                 accent.copy(alpha = 0.22f * (1f - pulse)),
@@ -393,6 +473,16 @@ fun ChinaMapCanvas(
         }
     }
 }
+
+/**
+ * 立体字的材质：字面渐变色、挤出厚度色（暗）、外发光色。
+ * 具体渐变在绘制时按字高生成，避免渐变跨整块画布。
+ */
+private data class Emboss(
+    val fillColors: List<Color>,
+    val depth: Color,
+    val glow: Color,
+)
 
 /** 二次贝塞尔曲线上的点。 */
 private fun quadPoint(a: Offset, c: Offset, b: Offset, t: Float): Offset {
