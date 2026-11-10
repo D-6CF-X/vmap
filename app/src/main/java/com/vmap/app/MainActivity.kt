@@ -45,9 +45,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            VMapTheme {
-                VMapRoot()
-            }
+            VMapRoot()
         }
     }
 }
@@ -71,39 +69,42 @@ private fun VMapRoot() {
     var tab by remember { mutableIntStateOf(0) }
     var showLightSheet by remember { mutableStateOf(false) }
     val section by viewModel.section.collectAsStateWithLifecycle()
+    val isDark by viewModel.isDark.collectAsStateWithLifecycle()
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        when (Tab.entries[tab]) {
-            Tab.MAP -> MapScreen(
-                viewModel = viewModel,
-                onLightCity = { showLightSheet = true },
-                dimmed = showLightSheet,
-            )
-
-            Tab.TIMELINE -> TimelineScreen(
-                viewModel = viewModel,
-                modifier = Modifier.padding(bottom = 84.dp),
-            )
-        }
-
-        NavigationBar(
-            modifier = Modifier.align(Alignment.BottomCenter),
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-        ) {
-            Tab.entries.forEachIndexed { index, item ->
-                NavigationBarItem(
-                    selected = tab == index,
-                    onClick = { tab = index },
-                    icon = { Icon(item.icon, contentDescription = item.label) },
-                    label = { Text(item.label) },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = section.accent,
-                        selectedTextColor = section.accent,
-                        indicatorColor = Color.Transparent,
-                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    ),
+    VMapTheme(darkTheme = isDark) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            when (Tab.entries[tab]) {
+                Tab.MAP -> MapScreen(
+                    viewModel = viewModel,
+                    onLightCity = { showLightSheet = true },
+                    dimmed = showLightSheet,
                 )
+
+                Tab.TIMELINE -> TimelineScreen(
+                    viewModel = viewModel,
+                    modifier = Modifier.padding(bottom = 84.dp),
+                )
+            }
+
+            NavigationBar(
+                modifier = Modifier.align(Alignment.BottomCenter),
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+            ) {
+                Tab.entries.forEachIndexed { index, item ->
+                    NavigationBarItem(
+                        selected = tab == index,
+                        onClick = { tab = index },
+                        icon = { Icon(item.icon, contentDescription = item.label) },
+                        label = { Text(item.label) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = section.accent,
+                            selectedTextColor = section.accent,
+                            indicatorColor = Color.Transparent,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
+                    )
+                }
             }
         }
     }

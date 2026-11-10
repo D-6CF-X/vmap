@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +49,7 @@ fun MapScreen(
     val route by viewModel.chronological.collectAsStateWithLifecycle()
     val stats by viewModel.stats.collectAsStateWithLifecycle()
     val showRoute by viewModel.showRoute.collectAsStateWithLifecycle()
+    val isDark by viewModel.isDark.collectAsStateWithLifecycle()
 
     var detailSpot by remember { mutableStateOf<Spot?>(null) }
 
@@ -60,6 +63,7 @@ fun MapScreen(
             onSpotClick = { detailSpot = it },
             // 有弹窗盖着时冻结动画，避免后台地图每帧重绘拖慢对话框
             animated = detailSpot == null && !dimmed,
+            isDark = isDark,
         )
 
         Column(
@@ -74,7 +78,9 @@ fun MapScreen(
                 stats = stats,
                 onSelect = viewModel::selectSection,
                 onToggleRoute = viewModel::toggleRoute,
+                onToggleTheme = viewModel::toggleTheme,
                 showRoute = showRoute,
+                isDark = isDark,
             )
         }
 
@@ -106,7 +112,9 @@ private fun SectionSwitchBar(
     stats: SectionStats,
     onSelect: (Section) -> Unit,
     onToggleRoute: () -> Unit,
+    onToggleTheme: () -> Unit,
     showRoute: Boolean,
+    isDark: Boolean,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
@@ -141,17 +149,31 @@ private fun SectionSwitchBar(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp,
                 )
-                Surface(
-                    onClick = onToggleRoute,
-                    shape = CircleShape,
-                    color = if (showRoute) section.accent.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant,
-                ) {
-                    Text(
-                        text = if (showRoute) "路线开" else "路线关",
-                        color = if (showRoute) section.accent else MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Surface(
+                        onClick = onToggleRoute,
+                        shape = CircleShape,
+                        color = if (showRoute) section.accent.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant,
+                    ) {
+                        Text(
+                            text = if (showRoute) "路线开" else "路线关",
+                            color = if (showRoute) section.accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        )
+                    }
+                    Surface(
+                        onClick = onToggleTheme,
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                    ) {
+                        Icon(
+                            imageVector = if (isDark) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                            contentDescription = if (isDark) "切到白天" else "切到夜间",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(8.dp),
+                        )
+                    }
                 }
             }
         }

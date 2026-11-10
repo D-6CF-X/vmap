@@ -25,6 +25,9 @@ class MapViewModel(
     private val _showRoute = MutableStateFlow(true)
     val showRoute: StateFlow<Boolean> = _showRoute.asStateFlow()
 
+    private val _isDark = MutableStateFlow(true)
+    val isDark: StateFlow<Boolean> = _isDark.asStateFlow()
+
     /** 按时间倒序，用于地图打点与列表。 */
     val spots: StateFlow<List<Spot>> = _section
         .flatMapLatest { repository.observeSpots(it) }
@@ -49,6 +52,10 @@ class MapViewModel(
 
     fun toggleRoute() {
         _showRoute.value = !_showRoute.value
+    }
+
+    fun toggleTheme() {
+        _isDark.value = !_isDark.value
     }
 
     suspend fun delete(spotId: String) {

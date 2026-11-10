@@ -2,6 +2,7 @@ package com.vmap.app.core.ui
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import com.vmap.app.domain.model.Section
@@ -19,7 +20,7 @@ val Section.accent: Color
         Section.MIKU -> MikuGreen
     }
 
-private val VMapColors = darkColorScheme(
+private val DarkColors = darkColorScheme(
     primary = TianyiBlue,
     onPrimary = Color(0xFF04202E),
     secondary = MikuGreen,
@@ -33,10 +34,27 @@ private val VMapColors = darkColorScheme(
     outline = Color(0xFF3A404B),
 )
 
+private val LightColors = lightColorScheme(
+    primary = TianyiBlue,
+    onPrimary = Color(0xFF04202E),
+    secondary = MikuGreen,
+    onSecondary = Color(0xFF04211F),
+    background = Color(0xFFF5F6F8),
+    onBackground = Color(0xFF1A1D22),
+    surface = Color(0xFFFFFFFF),
+    onSurface = Color(0xFF1A1D22),
+    surfaceVariant = Color(0xFFEAEDF1),
+    onSurfaceVariant = Color(0xFF5A6170),
+    outline = Color(0xFFB7BEC7),
+)
+
 /**
- * 固定暗色。应援色在亮底上会发灰，舞台上本来就是暗的。
+ * 白天 / 夜间两套配色。[darkTheme] 为 false 时用浅色，地图画布跟着切。
  */
 @Composable
-fun VMapTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = VMapColors, content = content)
+fun VMapTheme(darkTheme: Boolean = true, content: @Composable () -> Unit) {
+    MaterialTheme(
+        colorScheme = if (darkTheme) DarkColors else LightColors,
+        content = content,
+    )
 }

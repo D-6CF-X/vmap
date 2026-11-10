@@ -35,26 +35,45 @@ import com.vmap.app.core.map.ChinaMapData
 import com.vmap.app.core.ui.accent
 import com.vmap.app.domain.model.Section
 import com.vmap.app.domain.model.Spot
-import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.math.min
 
-private val UnlitProvince = Color(0xFF23272F)
-private val ProvinceBorder = Color(0xFF0F1115)
+/** 地图配色。白天 / 夜间各一套，应援色 [accent] 由板块决定、两种模式共用。 */
+private data class MapPalette(
+    val background: Color,
+    val unlitCity: Color,
+    val cityBorder: Color,
+    val provinceBound: Color,
+    val label: Color,
+    val shadow: Color,
+)
 
-/** 省级边界描边，比市界亮、粗，勾勒省轮廓。 */
-private val ProvinceBoundColor = Color(0xFF39404D)
-private val LabelColor = Color(0xFFE6E8EE)
+private val DarkPalette = MapPalette(
+    background = Color(0xFF0F1115),
+    unlitCity = Color(0xFF23272F),
+    cityBorder = Color(0xFF10131A),
+    provinceBound = Color(0xFF39404D),
+    label = Color(0xFF5A6170),
+    shadow = Color(0x55000000),
+)
 
-/** 未点亮城市名的颜色（低饱和灰，和应援色区分）。 */
-private val UnlitLabel = Color(0xFF5A6170)
+private val LightPalette = MapPalette(
+    background = Color(0xFFF5F6F8),
+    unlitCity = Color(0xFFE7EBF0),
+    cityBorder = Color(0xFFD9DEE5),
+    provinceBound = Color(0xFFA9B1BD),
+    label = Color(0xFF6B7480),
+    shadow = Color(0x1A000000),
+)
 
-/** 阴影色。 */
-private val ShadowColor = Color(0x55000000)
+/** 缩放超过这个值才显示地级市边界与未点亮城市名，避免全国视图糊成一团。 */
+private const val DETAIL_ZOOM = 2f
 
 /**
- * 自绘中国地图。去过城市整块填应援色，所有城市名都显示（点亮的用应援色），
- * 点击任意城市地块有选中高亮。路线为 3D 抛物线航线，城市点带呼吸光晕。
+ * 自绘中国地图。去过城市整块填应援色，点击城市有选中高亮，路线为 3D 抛物线航线。
+ *
+ * 信息分层：全国视图只显示省级边界、省名、点亮城市；放大到 [DETAIL_ZOOM] 以上
+ * 才展开地级市边界与未点亮城市名，保持缩小态干净。
  *
  * [animated] 为 false 时冻结动画——弹窗（详情/日期选择）盖在上面时传 false，
  * 避免后台地图每帧重绘拖慢对话框。
@@ -68,6 +87,7 @@ fun ChinaMapCanvas(
     showRoute: Boolean,
     onSpotClick: (Spot) -> Unit,
     animated: Boolean = true,
+    isDark: Boolean = true,
 ) {
     val context = LocalContext.current
     val provinces = remember { ChinaMapData.load(context) }
@@ -77,6 +97,7 @@ fun ChinaMapCanvas(
     }
     val textMeasurer = rememberTextMeasurer()
     val accent = section.accent
+    val palette = if (isDark) DarkPalette else LightPalette
 
     val visitedAdcodes = remember(spots) {
         spots.map { it.adcode }.toSet()
@@ -175,68 +196,67 @@ fun ChinaMapCanvas(
 
         fun toScreen(vx: Float, vy: Float) = Offset(vx * k + dx, vy * k + dy)
 
-        /**
-         * 名字只有在地块的屏幕外接框里装得下才画，且位置钳在框内，保证不越界。
-         * [minRatio] 宽度阈值倍数：点亮城市/省名用宽松值尽量常显，未点亮城市用严格值避免挤成一团。
-         */
-        fun drawFitted(layout: TextLayoutResult, bbox: Rect, color: Color, minRatio: Float) {
-            val tl = toScreen(bbox.left, bbox.top)
-            val br = toScreen(bbox.right, bbox.bottom)
-            val bw = br.x - tl.x
-            val bh = br.y - tl.y
-            val tw = layout.size.width.toFloat()
-            val th = layout.size.height.toFloat()
-            if (bw < tw * minRatio || bh < th * 1.6f) return
-            val cx = (tl.x + br.x) / 2f
-            val cy = (tl.y + br.y) / 2f
-            val x = (cx - tw / 2f).coerceIn(tl.x, (br.x - tw).coerceAtLeast(tl.x))
-            val y = (cy - th / 2f).coerceIn(tl.y, (br.y - th).coerceAtLeast(tl.y))
-            drawText(layout, color = color, topLeft = Offset(x, y))
-        }
+        // 背景
+        drawRect(palette.background)
 
-        // 城市地块：点亮填应援色，未点亮填表面色；选中的加高亮描边
+        // 城市地块填充：点亮填应援色，未点亮填表面色
         provinces.forEach { p ->
             val visited = visitedAdcodes.contains(p.adcode)
-            val fill = if (visited) accent else UnlitProvince
+            val fill = if (visited) accent else palette.unlitCity
             withTransform({
                 translate(dx, dy)
                 scale(k, k, pivot = Offset.Zero)
             }) {
                 drawPath(p.path, color = fill)
-                drawPath(p.path, color = ProvinceBorder, style = Stroke(width = 1f / k))
                 if (p.adcode == selectedAdcode) {
-                    drawPath(p.path, color = Color.White.copy(alpha = 0.85f), style = Stroke(width = 3f / k))
+                    drawPath(p.path, color = accent, style = Stroke(width = 2.5f / k))
                 }
             }
         }
 
-        // 省级边界：在地级市之上勾勒省界，省名归属清晰
+        // 地级市边界：放大后才画，缩小态只保留省级边界
+        if (scale >= DETAIL_ZOOM) {
+            provinces.forEach { p ->
+                withTransform({
+                    translate(dx, dy)
+                    scale(k, k, pivot = Offset.Zero)
+                }) {
+                    drawPath(p.path, color = palette.cityBorder, style = Stroke(width = 1f / k))
+                }
+            }
+        }
+
+        // 省级边界：始终画，勾勒省轮廓
         provinceBounds.forEach { b ->
             withTransform({
                 translate(dx, dy)
                 scale(k, k, pivot = Offset.Zero)
             }) {
-                drawPath(b.path, color = ProvinceBoundColor, style = Stroke(width = 1.4f / k))
+                drawPath(b.path, color = palette.provinceBound, style = Stroke(width = 1.4f / k))
             }
         }
 
-        // 名字显示不再按固定缩放阈值，而是看每个地块在屏幕上是否装得下：
-        // 东部密集小城市要放大很多才出名字，西部广域市早早显示。
-        // 省名（宽松阈值）+ 点亮城市名（宽松阈值）+ 未点亮城市名（严格阈值）。
+        // 省名：始终显示（宽松阈值，位置钳在省内）
         provinceLabels.forEach { label ->
             val layout = provinceLayouts[label.name] ?: return@forEach
             val bbox = provinceBBoxes[label.adcode] ?: return@forEach
-            drawFitted(layout, bbox, UnlitLabel, 1.05f)
+            drawFitted(layout, bbox, palette.label, 1.05f, ::toScreen)
         }
+
+        // 点亮城市名：始终显示（应援色）
         provinces.forEach { p ->
-            val lit = visitedAdcodes.contains(p.adcode)
+            if (!visitedAdcodes.contains(p.adcode)) return@forEach
             val layout = labelLayouts[p.adcode] ?: return@forEach
-            drawFitted(
-                layout,
-                p.bounds,
-                if (lit) accent else UnlitLabel.copy(alpha = 0.7f),
-                if (lit) 1.05f else 1.45f,
-            )
+            drawFitted(layout, p.bounds, accent, 1.05f, ::toScreen)
+        }
+
+        // 未点亮城市名：放大后才显示，且要装得下
+        if (scale >= DETAIL_ZOOM) {
+            provinces.forEach { p ->
+                if (visitedAdcodes.contains(p.adcode)) return@forEach
+                val layout = labelLayouts[p.adcode] ?: return@forEach
+                drawFitted(layout, p.bounds, palette.label.copy(alpha = 0.7f), 1.45f, ::toScreen)
+            }
         }
 
         // 路线：3D 抛物线（向上拱、中间粗亮两端细淡、地面投影、飞行光点拖尾）
@@ -297,7 +317,7 @@ fun ChinaMapCanvas(
 
             val pulse = (flow + index.toFloat() / (spots.size.coerceAtLeast(1))) % 1f
 
-            drawCircle(ShadowColor, radius = 11f, center = pos + Offset(0f, 3f))
+            drawCircle(palette.shadow, radius = 11f, center = pos + Offset(0f, 3f))
             drawCircle(
                 accent.copy(alpha = 0.22f * (1f - pulse)),
                 radius = 10f + 7f * pulse,
@@ -307,6 +327,31 @@ fun ChinaMapCanvas(
             drawCircle(accent, radius = 7.5f, center = pos)
         }
     }
+}
+
+/**
+ * 名字只有在地块的屏幕外接框里装得下才画，且位置钳在框内，保证不越界。
+ * [minRatio] 宽度阈值倍数：点亮城市/省名用宽松值尽量常显，未点亮城市用严格值避免挤成一团。
+ */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawFitted(
+    layout: TextLayoutResult,
+    bbox: Rect,
+    color: Color,
+    minRatio: Float,
+    toScreen: (Float, Float) -> Offset,
+) {
+    val tl = toScreen(bbox.left, bbox.top)
+    val br = toScreen(bbox.right, bbox.bottom)
+    val bw = br.x - tl.x
+    val bh = br.y - tl.y
+    val tw = layout.size.width.toFloat()
+    val th = layout.size.height.toFloat()
+    if (bw < tw * minRatio || bh < th * 1.6f) return
+    val cx = (tl.x + br.x) / 2f
+    val cy = (tl.y + br.y) / 2f
+    val x = (cx - tw / 2f).coerceIn(tl.x, (br.x - tw).coerceAtLeast(tl.x))
+    val y = (cy - th / 2f).coerceIn(tl.y, (br.y - th).coerceAtLeast(tl.y))
+    drawText(layout, color = color, topLeft = Offset(x, y))
 }
 
 /** 二次贝塞尔曲线上的点。 */
