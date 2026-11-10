@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.vmap.app.VMapApp
+import com.vmap.app.core.ui.GradientTitle
 import com.vmap.app.core.ui.accent
 import com.vmap.app.domain.model.Spot
 import com.vmap.app.domain.model.Tag
@@ -130,6 +131,7 @@ fun SpotEditSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp),
     ) {
         Column(
             modifier = Modifier
@@ -142,11 +144,10 @@ fun SpotEditSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
+                GradientTitle(
                     text = spot.cityName,
-                    color = accent,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Medium,
+                    accent = accent,
+                    fontSize = 22.sp,
                 )
                 Text(
                     text = SimpleDateFormat("yyyy.MM.dd", Locale.getDefault())

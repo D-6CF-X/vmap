@@ -103,6 +103,7 @@ import android.graphics.Matrix
 import android.graphics.Shader
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.geometry.Offset
 
 class MainActivity : ComponentActivity() {
 
@@ -227,6 +228,35 @@ private fun VMapRoot() {
                         },
                     ),
             ) {
+                // 非地图页铺一层带应援色光晕的底，玻璃卡片才有东西可透，不然贴在纯色上像灰块
+                if (page != Page.MAP) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .drawBehind {
+                                drawRect(
+                                    Brush.verticalGradient(
+                                        listOf(Color(0xFF0B0E13), Color(0xFF101520)),
+                                    ),
+                                )
+                                drawCircle(
+                                    brush = Brush.radialGradient(
+                                        listOf(section.accent.copy(alpha = 0.18f), Color.Transparent),
+                                    ),
+                                    radius = size.width * 0.9f,
+                                    center = Offset(size.width * 0.92f, size.height * 0.04f),
+                                )
+                                drawCircle(
+                                    brush = Brush.radialGradient(
+                                        listOf(section.accent.copy(alpha = 0.10f), Color.Transparent),
+                                    ),
+                                    radius = size.width * 0.85f,
+                                    center = Offset(size.width * 0.04f, size.height * 0.72f),
+                                )
+                            },
+                    )
+                }
+
                 when (page) {
                     Page.MAP -> MapScreen(
                         viewModel = viewModel,
@@ -236,11 +266,11 @@ private fun VMapRoot() {
 
                     Page.TIMELINE -> TimelineScreen(
                         viewModel = viewModel,
-                        modifier = Modifier.padding(top = 84.dp),
+                        isDark = isDark,
                     )
 
-                    Page.ACHIEVEMENT -> AchievementScreen(viewModel = viewModel)
-                    Page.REVIEW -> YearReviewScreen(viewModel = viewModel)
+                    Page.ACHIEVEMENT -> AchievementScreen(viewModel = viewModel, isDark = isDark)
+                    Page.REVIEW -> YearReviewScreen(viewModel = viewModel, isDark = isDark)
                 }
 
                 // 左上角汉堡按钮，打开抽屉（覆盖层，所有页面共用）；抽屉打开时淡出，避免露出半截
@@ -350,7 +380,7 @@ private fun VMapDrawer(
                     // 压暗一层，保证上面的白字可读
                     Modifier.background(
                         Brush.verticalGradient(
-                            listOf(Color.Black.copy(alpha = 0.34f), Color.Black.copy(alpha = 0.72f)),
+                            listOf(Color.Black.copy(alpha = 0.48f), Color.Black.copy(alpha = 0.78f)),
                         ),
                     )
                 } else {

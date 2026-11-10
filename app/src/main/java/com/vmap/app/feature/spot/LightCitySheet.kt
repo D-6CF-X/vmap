@@ -3,6 +3,7 @@ package com.vmap.app.feature.spot
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -34,7 +35,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -42,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import com.vmap.app.VMapApp
 import com.vmap.app.core.geo.GeoPoint
 import com.vmap.app.core.geo.Srid
+import com.vmap.app.core.ui.GradientTitle
 import com.vmap.app.core.ui.accent
 import com.vmap.app.data.city.BuiltinCitySearcher
 import com.vmap.app.data.city.CityHit
@@ -92,11 +97,10 @@ fun LightCitySheet(
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
         Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
-            Text(
+            GradientTitle(
                 text = if (selected == null) "选择要点亮的城市" else "这场演出",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
+                accent = accent,
+                fontSize = 20.sp,
             )
             Spacer(Modifier.height(14.dp))
 
@@ -179,37 +183,59 @@ fun LightCitySheet(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(18.dp))
-                Button(
-                    onClick = {
-                        if (title.isBlank()) return@Button
-                        scope.launch {
-                            // CityHit 是 WGS84，入库统一 GCJ02
-                            val gcj = GeoPoint(city.lat, city.lng, Srid.WGS84).asGcj02()
-                            app.container.spotRepository.save(
-                                Spot(
-                                    section = section,
-                                    adcode = city.adcode,
-                                    cityName = city.name,
-                                    provinceName = city.parent,
-                                    lat = gcj.lat,
-                                    lng = gcj.lng,
-                                    title = title.trim(),
-                                    venue = venue.trim(),
-                                    performedAt = performedAt,
-                                    note = note.trim(),
+                val canSubmit = title.isNotBlank()
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(
+                            if (canSubmit) {
+                                Brush.linearGradient(
+                                    listOf(
+                                        lerp(accent, Color.White, 0.35f),
+                                        accent,
+                                        lerp(accent, Color.Black, 0.15f),
+                                    ),
                                 )
-                            )
-                            onDismiss()
+                            } else {
+                                Brush.linearGradient(
+                                    listOf(
+                                        Color.Gray.copy(alpha = 0.35f),
+                                        Color.Gray.copy(alpha = 0.22f),
+                                    ),
+                                )
+                            },
+                        )
+                        .clickable(enabled = canSubmit) {
+                            scope.launch {
+                                // CityHit 是 WGS84，入库统一 GCJ02
+                                val gcj = GeoPoint(city.lat, city.lng, Srid.WGS84).asGcj02()
+                                app.container.spotRepository.save(
+                                    Spot(
+                                        section = section,
+                                        adcode = city.adcode,
+                                        cityName = city.name,
+                                        provinceName = city.parent,
+                                        lat = gcj.lat,
+                                        lng = gcj.lng,
+                                        title = title.trim(),
+                                        venue = venue.trim(),
+                                        performedAt = performedAt,
+                                        note = note.trim(),
+                                    )
+                                )
+                                onDismiss()
+                            }
                         }
-                    },
-                    enabled = title.isNotBlank(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = accent,
-                        contentColor = Color(0xFF06151B),
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
+                        .padding(vertical = 14.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Text("点亮这座城", fontWeight = FontWeight.Medium)
+                    Text(
+                        text = "点亮这座城",
+                        color = if (canSubmit) Color(0xFF06151B) else Color.White.copy(alpha = 0.55f),
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                    )
                 }
             }
         }

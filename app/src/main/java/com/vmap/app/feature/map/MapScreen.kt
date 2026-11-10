@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,6 +45,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.vmap.app.core.geo.distanceKm
 import com.vmap.app.core.ui.accent
 import com.vmap.app.core.ui.glassPanel
 import com.vmap.app.domain.model.Section
@@ -92,6 +94,8 @@ fun MapScreen(
             SectionSwitchBar(
                 accent = section.accent,
                 stats = stats,
+                spots = spots,
+                route = route,
                 onToggleRoute = viewModel::toggleRoute,
                 onToggleTheme = viewModel::toggleTheme,
                 showRoute = showRoute,
@@ -128,17 +132,27 @@ fun MapScreen(
     }
 }
 
-/** 顶部信息条：玻璃卡片 + 应援色立体数字 + 路线/主题开关。 */
+/** 顶部信息条：玻璃卡片 + 应援色立体数字 + 路线/主题开关。点信息条可在三种统计间切换。 */
 @Composable
 private fun SectionSwitchBar(
     accent: Color,
     stats: SectionStats,
+    spots: List<Spot>,
+    route: List<Spot>,
     onToggleRoute: () -> Unit,
     onToggleTheme: () -> Unit,
     showRoute: Boolean,
     isDark: Boolean,
 ) {
     val shape = RoundedCornerShape(22.dp)
+
+    // 三种视角：城市/场次 → 累计里程 → 最常去
+    var statPage by remember { mutableIntStateOf(0) }
+    val totalKm = remember(route) {
+        route.zipWithNext().sumOf { (a, b) -> distanceKm(a.lat, a.lng, b.lat, b.lng) }
+    }
+    val topCity = remember(spots) { spots.groupBy { it.cityName }.maxByOrNull { it.value.size } }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -150,19 +164,44 @@ private fun SectionSwitchBar(
         val numberColor = if (isDark) lerp(accent, Color.White, 0.15f) else accent
         Text(
             text = buildAnnotatedString {
-                append("已点亮 ")
-                withStyle(SpanStyle(color = numberColor, fontWeight = FontWeight.Bold, fontSize = 17.sp)) {
-                    append("${stats.cityCount}")
+                when (statPage) {
+                    1 -> {
+                        append("累计里程 ")
+                        withStyle(SpanStyle(color = numberColor, fontWeight = FontWeight.Bold, fontSize = 17.sp)) {
+                            append("${totalKm.toInt()}")
+                        }
+                        append(" 公里")
+                    }
+
+                    2 -> {
+                        if (topCity == null) {
+                            append("还没有演出记录")
+                        } else {
+                            append("最常去 ")
+                            withStyle(SpanStyle(color = numberColor, fontWeight = FontWeight.Bold, fontSize = 15.sp)) {
+                                append(topCity.key)
+                            }
+                            append(" · ${topCity.value.size} 次")
+                        }
+                    }
+
+                    else -> {
+                        append("已点亮 ")
+                        withStyle(SpanStyle(color = numberColor, fontWeight = FontWeight.Bold, fontSize = 17.sp)) {
+                            append("${stats.cityCount}")
+                        }
+                        append(" 座城市 · ")
+                        withStyle(SpanStyle(color = numberColor, fontWeight = FontWeight.Bold, fontSize = 17.sp)) {
+                            append("${stats.spotCount}")
+                        }
+                        append(" 场演出")
+                    }
                 }
-                append(" 座城市 · ")
-                withStyle(SpanStyle(color = numberColor, fontWeight = FontWeight.Bold, fontSize = 17.sp)) {
-                    append("${stats.spotCount}")
-                }
-                append(" 场演出")
             },
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp,
             maxLines = 1,
+            modifier = Modifier.clickable { statPage = (statPage + 1) % 3 },
         )
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
