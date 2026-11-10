@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -53,8 +54,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.vmap.app.core.ui.GradientTitle
 import com.vmap.app.core.ui.VMapTheme
 import com.vmap.app.core.ui.accent
+import com.vmap.app.core.ui.gradientTextStyle
 import com.vmap.app.data.share.ShareCardGenerator
 import com.vmap.app.data.share.ShareHelper
 import com.vmap.app.domain.model.Section
@@ -113,11 +116,10 @@ private fun VMapRoot() {
                     drawerContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
+                        GradientTitle(
                             text = "V-Map",
-                            color = section.accent,
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
+                            accent = section.accent,
+                            fontSize = 26.sp,
                         )
                         Text(
                             text = "为歌声走过的城市",
@@ -260,9 +262,10 @@ private fun DrawerSectionChip(
     ) {
         Text(
             text = label,
-            color = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 14.sp,
-            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            style = if (selected) gradientTextStyle(accent, 14.sp) else TextStyle(
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 14.sp,
+            ),
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(vertical = 10.dp),
         )

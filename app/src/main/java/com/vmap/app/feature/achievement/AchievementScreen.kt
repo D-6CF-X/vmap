@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.vmap.app.core.ui.GradientTitle
 import com.vmap.app.core.ui.accent
 import com.vmap.app.domain.model.Section
 import com.vmap.app.domain.model.Spot
@@ -66,11 +67,10 @@ fun AchievementScreen(viewModel: MapViewModel) {
             .padding(horizontal = 20.dp)
             .padding(top = 84.dp, bottom = 24.dp),
     ) {
-        Text(
+        GradientTitle(
             text = "成就徽章",
-            color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
+            accent = accent,
+            fontSize = 24.sp,
         )
         Text(
             text = "已解锁 $achievedCount / ${ACHIEVEMENTS.size}",

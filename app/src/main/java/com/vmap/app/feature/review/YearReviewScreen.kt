@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.vmap.app.core.ui.GradientTitle
 import com.vmap.app.core.ui.accent
 import com.vmap.app.domain.model.Spot
 import com.vmap.app.feature.map.MapViewModel
@@ -46,11 +47,10 @@ fun YearReviewScreen(viewModel: MapViewModel) {
             .padding(horizontal = 20.dp)
             .padding(top = 84.dp, bottom = 24.dp),
     ) {
-        Text(
+        GradientTitle(
             text = "$year 年度回顾",
-            color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
+            accent = accent,
+            fontSize = 24.sp,
         )
         Text(
             text = "这一年，你为歌声走过的路",
