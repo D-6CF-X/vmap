@@ -1,5 +1,6 @@
 package com.vmap.app
 
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -8,6 +9,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -50,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
@@ -79,6 +82,27 @@ import com.vmap.app.feature.review.YearReviewScreen
 import com.vmap.app.feature.spot.LightCitySheet
 import com.vmap.app.feature.timeline.TimelineScreen
 import kotlinx.coroutines.launch
+import android.graphics.ImageDecoder
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.Wallpaper
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import com.vmap.app.core.ui.DrawerWallpaper
+import com.vmap.app.feature.wallpaper.WallpaperCropDialog
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.shadow
+import android.graphics.BitmapShader
+import android.graphics.Matrix
+import android.graphics.Shader
+import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.asAndroidBitmap
 
 class MainActivity : ComponentActivity() {
 
@@ -118,18 +142,60 @@ private fun VMapRoot() {
         val drawerState = rememberDrawerState(DrawerValue.Closed)
         val scope = rememberCoroutineScope()
 
+        // 侧栏壁纸：选图 → 裁剪 → 存私有目录
+        var wallpaper by remember { mutableStateOf<ImageBitmap?>(null) }
+        var cropSource by remember { mutableStateOf<ImageBitmap?>(null) }
+        LaunchedEffect(Unit) { wallpaper = DrawerWallpaper.load(context) }
+        val pickWallpaper = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.PickVisualMedia(),
+        ) { uri ->
+            if (uri != null) {
+                cropSource = runCatching {
+                    val src = ImageDecoder.createSource(context.contentResolver, uri)
+                    ImageDecoder.decodeBitmap(src) { decoder, info, _ ->
+                        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                        val longEdge = maxOf(info.size.width, info.size.height)
+                        if (longEdge > 2400) {
+                            val r = 2400f / longEdge
+                            decoder.setTargetSize(
+                                (info.size.width * r).toInt().coerceAtLeast(1),
+                                (info.size.height * r).toInt().coerceAtLeast(1),
+                            )
+                        }
+                    }.asImageBitmap()
+                }.getOrNull()
+            }
+        }
+
+        // 抽屉打开时把底图糊掉，玻璃面板叠上去就是真磨砂
+        val drawerProgress by animateFloatAsState(
+            targetValue = if (drawerState.isOpen) 1f else 0f,
+            animationSpec = tween(220),
+            label = "drawerFrost",
+        )
+
         ModalNavigationDrawer(
             drawerState = drawerState,
-            scrimColor = Color.Black.copy(alpha = if (isDark) 0.58f else 0.34f),
+            scrimColor = Color.Black.copy(alpha = if (isDark) 0.30f else 0.20f),
             drawerContent = {
                 VMapDrawer(
                     section = section,
                     page = page,
                     isDark = isDark,
+                    wallpaper = wallpaper,
                     onSelectSection = viewModel::selectSection,
                     onSelectPage = { item ->
                         page = item
                         scope.launch { drawerState.close() }
+                    },
+                    onPickWallpaper = {
+                        pickWallpaper.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                        )
+                    },
+                    onClearWallpaper = {
+                        DrawerWallpaper.clear(context)
+                        wallpaper = null
                     },
                     onShare = {
                         scope.launch {
@@ -150,12 +216,22 @@ private fun VMapRoot() {
                 )
             },
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (drawerProgress > 0.01f) {
+                            Modifier.blur((14f * drawerProgress).dp)
+                        } else {
+                            Modifier
+                        },
+                    ),
+            ) {
                 when (page) {
                     Page.MAP -> MapScreen(
                         viewModel = viewModel,
                         onLightCity = { showLightSheet = true },
-                        dimmed = showLightSheet,
+                        dimmed = showLightSheet || drawerState.isOpen,
                     )
 
                     Page.TIMELINE -> TimelineScreen(
@@ -206,6 +282,19 @@ private fun VMapRoot() {
                 onDismiss = { showLightSheet = false },
             )
         }
+
+        cropSource?.let { source ->
+            WallpaperCropDialog(
+                source = source,
+                accent = section.accent,
+                onDismiss = { cropSource = null },
+                onConfirm = { bitmap ->
+                    DrawerWallpaper.save(context, bitmap)
+                    wallpaper = bitmap.asImageBitmap()
+                    cropSource = null
+                },
+            )
+        }
     }
 }
 
@@ -215,28 +304,78 @@ private fun VMapDrawer(
     section: Section,
     page: Page,
     isDark: Boolean,
+    wallpaper: ImageBitmap?,
     onSelectSection: (Section) -> Unit,
     onSelectPage: (Page) -> Unit,
+    onPickWallpaper: () -> Unit,
+    onClearWallpaper: () -> Unit,
     onShare: () -> Unit,
     onClose: () -> Unit,
 ) {
     val accent = section.accent
     val shape = RoundedCornerShape(topEnd = 26.dp, bottomEnd = 26.dp)
-    Column(
+
+    // 壁纸用 BitmapShader 铺（cover），交给 background 绘制，尺寸由修饰符边界保证准确
+    val wallpaperBrush = remember(wallpaper) {
+        wallpaper?.let { img ->
+            val bmp = img.asAndroidBitmap()
+            object : ShaderBrush() {
+                override fun createShader(size: androidx.compose.ui.geometry.Size): Shader {
+                    val k = maxOf(size.width / bmp.width, size.height / bmp.height)
+                    val matrix = Matrix().apply {
+                        setScale(k, k)
+                        postTranslate(
+                            (size.width - bmp.width * k) / 2f,
+                            (size.height - bmp.height * k) / 2f,
+                        )
+                    }
+                    return BitmapShader(bmp, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply {
+                        setLocalMatrix(matrix)
+                    }
+                }
+            }
+        }
+    }
+
+    Box(
         modifier = Modifier
             .width(262.dp)
             .statusBarsPadding()
             .padding(top = 10.dp, bottom = 12.dp)
-            .glassPanel(
-                shape = shape,
-                isDark = isDark,
-                accent = accent,
-                elevation = 30.dp,
-                base = 0.91f,
-            )
-            .navigationBarsPadding()
-            .padding(start = 14.dp, end = 14.dp, top = 16.dp, bottom = 16.dp),
+            .shadow(elevation = 30.dp, shape = shape, clip = false)
+            .clip(shape)
+            .then(if (wallpaperBrush != null) Modifier.background(wallpaperBrush) else Modifier)
+            .then(
+                if (wallpaperBrush != null) {
+                    // 压暗一层，保证上面的白字可读
+                    Modifier.background(
+                        Brush.verticalGradient(
+                            listOf(Color.Black.copy(alpha = 0.34f), Color.Black.copy(alpha = 0.72f)),
+                        ),
+                    )
+                } else {
+                    Modifier
+                },
+            ),
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .glassPanel(
+                    shape = shape,
+                    isDark = isDark,
+                    accent = accent,
+                    elevation = 0.dp,
+                    // 有壁纸时玻璃让位给图；能实时模糊时也可以更透，磨砂靠底图模糊来撑
+                    base = when {
+                        wallpaper != null -> 0.22f
+                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> 0.54f
+                        else -> 0.86f
+                    },
+                )
+                .navigationBarsPadding()
+                .padding(start = 14.dp, end = 14.dp, top = 16.dp, bottom = 16.dp),
+        ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -309,6 +448,20 @@ private fun VMapDrawer(
         Spacer(Modifier.height(10.dp))
 
         DrawerNavItem(
+            icon = Icons.Filled.Wallpaper,
+            label = "侧栏壁纸",
+            selected = false,
+            accent = accent,
+            isDark = isDark,
+            onClick = onPickWallpaper,
+            trailing = if (wallpaper != null) {
+                { RemoveWallpaperChip(onClick = onClearWallpaper) }
+            } else {
+                null
+            },
+        )
+
+        DrawerNavItem(
             icon = Icons.Filled.Share,
             label = "分享点亮卡片",
             selected = false,
@@ -326,6 +479,7 @@ private fun VMapDrawer(
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )
+        }
     }
 }
 
@@ -349,6 +503,7 @@ private fun DrawerNavItem(
     accent: Color,
     isDark: Boolean,
     onClick: () -> Unit,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val shape = RoundedCornerShape(14.dp)
     Row(
@@ -405,6 +560,28 @@ private fun DrawerNavItem(
                     fontSize = 13.sp,
                 )
             },
+        )
+        if (trailing != null) {
+            Spacer(Modifier.weight(1f))
+            trailing()
+        }
+    }
+}
+
+/** 有壁纸时导航项右侧的小"移除"胶囊。 */
+@Composable
+private fun RemoveWallpaperChip(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(Color.White.copy(alpha = 0.10f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 9.dp, vertical = 3.dp),
+    ) {
+        Text(
+            text = "移除",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 10.sp,
         )
     }
 }
