@@ -225,7 +225,7 @@ private fun AchievementCard(
                 isDark = isDark,
                 accent = if (achieved) accent else lerp(accent, Color.Gray, 0.6f),
                 elevation = if (achieved) 10.dp else 4.dp,
-                base = if (achieved) 0.72f else 0.5f,
+                base = if (achieved) 0.54f else 0.36f,
             )
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {

@@ -102,6 +102,7 @@ import android.graphics.BitmapShader
 import android.graphics.Matrix
 import android.graphics.Shader
 import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.geometry.Offset
 
@@ -380,7 +381,7 @@ private fun VMapDrawer(
                     // 压暗一层，保证上面的白字可读
                     Modifier.background(
                         Brush.verticalGradient(
-                            listOf(Color.Black.copy(alpha = 0.48f), Color.Black.copy(alpha = 0.78f)),
+                            listOf(Color.Black.copy(alpha = 0.56f), Color.Black.copy(alpha = 0.86f)),
                         ),
                     )
                 } else {
@@ -398,9 +399,9 @@ private fun VMapDrawer(
                     elevation = 0.dp,
                     // 有壁纸时玻璃让位给图；能实时模糊时也可以更透，磨砂靠底图模糊来撑
                     base = when {
-                        wallpaper != null -> 0.22f
-                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> 0.54f
-                        else -> 0.86f
+                        wallpaper != null -> 0.24f
+                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> 0.38f
+                        else -> 0.74f
                     },
                 )
                 .navigationBarsPadding()
@@ -536,6 +537,8 @@ private fun DrawerNavItem(
     trailing: (@Composable () -> Unit)? = null,
 ) {
     val shape = RoundedCornerShape(14.dp)
+    // 玻璃很透，字压一层淡淡的阴影，落在壁纸/亮背景上也认得出
+    val labelShadow = Shadow(Color.Black.copy(alpha = if (isDark) 0.45f else 0.20f), Offset(0f, 1f), 5f)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -583,11 +586,13 @@ private fun DrawerNavItem(
                     color = if (isDark) lerp(accent, Color.White, 0.45f) else accent,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
+                    shadow = labelShadow,
                 )
             } else {
                 TextStyle(
                     color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 13.sp,
+                    shadow = labelShadow,
                 )
             },
         )
