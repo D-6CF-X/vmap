@@ -80,6 +80,15 @@ fun MapScreen(
 
     var detailSpot by remember { mutableStateOf<Spot?>(null) }
 
+    // 巡演点亮动画：focusYear 选中某年时，点「播放」触发按时间顺序逐城点亮（含飞行/粒子/波纹）
+    var tourPlaying by remember { mutableStateOf(false) }
+
+    // 播放序列：焦点年份按时间正序；未选年份时播放全部（全体）
+    val tourSpots = remember(spots, focusYear) {
+        val base = if (focusYear == null) spots else spots.filter { yearOf(it.performedAt) == focusYear }
+        base.sortedBy { it.performedAt }
+    }
+
     // 板块切换时主色和"综合"混合进度都做过渡，地图不会瞬间变色
     val accent = animateColorAsState(
         targetValue = board.accent,
@@ -115,6 +124,9 @@ fun MapScreen(
             darkProgress = darkProgress,
             yearLayers = yearLayers,
             focusYear = focusYear,
+            tourSpots = tourSpots,
+            tourPlaying = tourPlaying,
+            onTourEnd = { tourPlaying = false },
         )
 
         Column(
@@ -137,14 +149,16 @@ fun MapScreen(
                 yearLayers = yearLayers,
             )
 
-            // 年份图例：每个去过的年份一个色点，越早越淡；点一下只看那一年
+            // 年份图例：每个去过的年份一个色点，越早越淡；点一下只看那一年，可播放逐一点亮
             if (yearLayers && spots.isNotEmpty()) {
                 YearLegendBar(
                     spots = spots,
                     accent = accent,
                     isDark = isDark,
                     focusYear = focusYear,
+                    playing = tourPlaying,
                     onSelect = viewModel::setFocusYear,
+                    onPlay = { tourPlaying = true },
                 )
             }
 
@@ -358,7 +372,9 @@ private fun YearLegendBar(
     accent: Color,
     isDark: Boolean,
     focusYear: Int?,
+    playing: Boolean,
     onSelect: (Int?) -> Unit,
+    onPlay: () -> Unit,
 ) {
     val years = remember(spots) { spots.map { yearOf(it.performedAt) }.distinct().sorted() }
     if (years.isEmpty()) return
@@ -382,6 +398,38 @@ private fun YearLegendBar(
                     fontSize = 10.sp,
                     letterSpacing = 1.4.sp,
                 )
+            }
+            // 「全体」入口：不聚焦某一年，播放全部
+            item {
+                val selected = focusYear == null
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(
+                            if (selected) accent.copy(alpha = 0.22f)
+                            else Color.White.copy(alpha = if (isDark) 0.05f else 0.40f),
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = if (selected) accent.copy(alpha = 0.60f)
+                            else Color.White.copy(alpha = if (isDark) 0.10f else 0.55f),
+                            shape = CircleShape,
+                        )
+                        .clickable { onSelect(null) }
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                ) {
+                    Text(
+                        text = "全体",
+                        color = if (selected) {
+                            if (isDark) lerp(accent, Color.White, 0.25f)
+                            else lerp(accent, Color(0xFF08161E), 0.55f)
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        fontSize = 11.sp,
+                        fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+                    )
+                }
             }
             items(years) { year ->
                 val strength = if (maxYear <= minYear) 1f
@@ -421,6 +469,25 @@ private fun YearLegendBar(
                         },
                         fontSize = 11.sp,
                         fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+                    )
+                }
+            }
+            // 播放按钮：始终显示，点对应年份/全体后播放逐城点亮动画
+            item {
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(accent.copy(alpha = 0.22f))
+                        .border(1.dp, accent.copy(alpha = 0.55f), CircleShape)
+                        .clickable(enabled = !playing, onClick = onPlay)
+                        .padding(horizontal = 12.dp, vertical = 5.dp),
+                ) {
+                    Text(
+                        text = if (playing) "播放中…" else "▶ 播放",
+                        color = if (isDark) lerp(accent, Color.White, 0.25f)
+                        else lerp(accent, Color(0xFF08161E), 0.55f),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
                     )
                 }
             }

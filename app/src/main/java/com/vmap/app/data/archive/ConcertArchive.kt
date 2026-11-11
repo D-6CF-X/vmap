@@ -24,6 +24,8 @@ data class ArchiveEvent(
     val lng: Double,
     val venue: String,
     val note: String,
+    val detail: String = "",
+    val videoUrl: String = "",
 ) {
     /** 把 "2017.06.17" / "2019.11" 这类标签转成时间戳，缺日按 1 号、缺月按 1 月。 */
     val performedAt: Long
@@ -52,6 +54,8 @@ data class ArchiveEvent(
             venue = venue,
             performedAt = performedAt,
             note = note,
+            detail = detail,
+            videoUrl = videoUrl,
         )
     }
 }
@@ -92,6 +96,8 @@ object ConcertArchive {
                         lng = o.optDouble("lng", 0.0),
                         venue = o.optString("venue"),
                         note = o.optString("note"),
+                        detail = o.optString("detail"),
+                        videoUrl = o.optString("videoUrl"),
                     )
                 }.sortedByDescending { it.performedAt }
             }.getOrDefault(emptyList())

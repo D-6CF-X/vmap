@@ -4,6 +4,9 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -59,6 +63,7 @@ import com.vmap.app.core.ui.accent
 import com.vmap.app.domain.model.Spot
 import com.vmap.app.domain.model.Tag
 import com.vmap.app.feature.map.MapViewModel
+import com.vmap.app.feature.web.WebViewerDialog
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -87,6 +92,9 @@ fun SpotEditSheet(
     var showDatePicker by remember { mutableStateOf(false) }
     var importing by remember { mutableStateOf(false) }
     var showNewTag by remember { mutableStateOf(false) }
+    var showVideo by remember { mutableStateOf(false) }
+    var detail by remember(spot) { mutableStateOf(spot.detail) }
+    var videoUrl by remember(spot) { mutableStateOf(spot.videoUrl) }
 
     val photos by app.container.spotRepository
         .observePhotos(spot.id)
@@ -218,6 +226,58 @@ fun SpotEditSheet(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 13.sp,
                     )
+                }
+                // 演唱会详情（往期档案带来的长介绍）
+                if (detail.isNotBlank()) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = detail,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp,
+                    )
+                }
+                // 视频入口：有 B 站链接时显示，点开走内置浏览器
+                if (videoUrl.isNotBlank()) {
+                    Spacer(Modifier.height(14.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(accent.copy(alpha = 0.28f), accent.copy(alpha = 0.10f)),
+                                ),
+                            )
+                            .border(1.dp, accent.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                            .clickable { showVideo = true }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "▶",
+                                color = accent,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "观看演出视频",
+                                    color = if (spot.section == com.vmap.app.domain.model.Section.TIANYI) {
+                                        Color(0xFF0B1F2B)
+                                    } else accent,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    text = "哔哩哔哩 · 应用内打开",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    fontSize = 10.sp,
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
@@ -397,6 +457,15 @@ fun SpotEditSheet(
             dismissButton = {
                 TextButton(onClick = { showNewTag = false }) { Text("取消") }
             },
+        )
+    }
+
+    if (showVideo && videoUrl.isNotBlank()) {
+        WebViewerDialog(
+            url = videoUrl,
+            title = spot.title,
+            isDark = true,
+            onDismiss = { showVideo = false },
         )
     }
 }

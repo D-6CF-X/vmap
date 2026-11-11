@@ -50,7 +50,7 @@ import kotlinx.coroutines.launch
  * 往音簿：历年演出档案。
  *
  * 按年份倒序展示洛天依与初音未来在中国（含港澳）的主要演出，
- * 任意一条可以一键「记入足迹」——转成自己的打卡记录，地图上就会按年份点亮。
+ * 任意一条可以一键「快速添加」——转成自己的打卡记录，地图上就会按年份点亮。
  */
 @Composable
 fun ArchiveScreen(
@@ -157,7 +157,7 @@ fun ArchiveScreen(
                         if (!recorded) {
                             scope.launch {
                                 viewModel.save(event.toSpot())
-                                Toast.makeText(context, "已记入足迹 · ${event.city}", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "已添加足迹 · ${event.city}", Toast.LENGTH_SHORT).show()
                             }
                         }
                     },
@@ -244,7 +244,7 @@ private fun ArchiveRow(
     }
 }
 
-/** 右侧小胶囊：记入 / 已记录。 */
+/** 右侧小胶囊：快速添加 / 已添加。 */
 @Composable
 private fun RecordChip(
     accent: Color,
@@ -269,7 +269,7 @@ private fun RecordChip(
             .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {
         Text(
-            text = if (recorded) "已记录" else "记入",
+            text = if (recorded) "已添加" else "快速添加",
             color = if (recorded) {
                 MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             } else {

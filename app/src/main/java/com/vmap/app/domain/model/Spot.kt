@@ -25,6 +25,10 @@ data class Spot(
     val venue: String = "",
     val performedAt: Long,
     val note: String = "",
+    /** 演唱会详情（较长的介绍文字），详情页展示。 */
+    val detail: String = "",
+    /** B 站视频链接 / 搜索链接，详情页点开走内置浏览器。 */
+    val videoUrl: String = "",
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val deleted: Boolean = false,
