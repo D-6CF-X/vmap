@@ -38,6 +38,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.QueueMusic
@@ -85,6 +86,7 @@ import com.vmap.app.data.share.ShareCardGenerator
 import com.vmap.app.data.share.ShareHelper
 import com.vmap.app.domain.model.Section
 import com.vmap.app.feature.achievement.AchievementScreen
+import com.vmap.app.feature.archive.ArchiveScreen
 import com.vmap.app.feature.map.MapScreen
 import com.vmap.app.feature.map.MapViewModel
 import com.vmap.app.feature.review.YearReviewScreen
@@ -132,6 +134,7 @@ class MainActivity : ComponentActivity() {
 private enum class Page(val label: String, val icon: ImageVector) {
     MAP("地图", Icons.Filled.Map),
     TIMELINE("时间线", Icons.Filled.Timeline),
+    ARCHIVE("往音簿", Icons.Filled.LibraryMusic),
     ACHIEVEMENT("成就", Icons.Filled.EmojiEvents),
     REVIEW("年度回顾", Icons.Filled.CalendarMonth),
     SONGS("歌单排行", Icons.Filled.QueueMusic),
@@ -325,6 +328,8 @@ private fun VMapRoot() {
                             viewModel = viewModel,
                             isDark = isDark,
                         )
+
+                        Page.ARCHIVE -> ArchiveScreen(viewModel = viewModel, isDark = isDark)
 
                         Page.ACHIEVEMENT -> AchievementScreen(viewModel = viewModel, isDark = isDark)
                         Page.REVIEW -> YearReviewScreen(viewModel = viewModel, isDark = isDark)

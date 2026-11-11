@@ -105,6 +105,10 @@ fun ChinaMapCanvas(
     animated: Boolean = true,
     isDark: Boolean = true,
     darkProgress: Float = if (isDark) 1f else 0f,
+    /** 年份分层：地块按演出年份着色，越早越淡。 */
+    yearLayers: Boolean = false,
+    /** 只看某一年；null 表示全年份。 */
+    focusYear: Int? = null,
 ) {
     val context = LocalContext.current
     val provinces = remember { ChinaMapData.load(context) }
@@ -119,13 +123,36 @@ fun ChinaMapCanvas(
         else -> blendPalette(LightPalette, DarkPalette, darkProgress)
     }
 
-    val visitedAdcodes = remember(spots) {
-        spots.map { it.adcode }.toSet()
+    // 年份聚焦时，只把当年的记录当作"点亮"，其余视为未点亮
+    val activeSpots = remember(spots, focusYear) {
+        if (focusYear == null) spots else spots.filter { yearOf(it.performedAt) == focusYear }
+    }
+    val activeRoute = remember(route, focusYear) {
+        if (focusYear == null) route else route.filter { yearOf(it.performedAt) == focusYear }
+    }
+
+    val visitedAdcodes = remember(activeSpots) {
+        activeSpots.map { it.adcode }.toSet()
+    }
+
+    // 每个城市去过的年份（升序去重），决定地块的年份渐变
+    val cityYears = remember(activeSpots) {
+        activeSpots.groupBy { it.adcode }
+            .mapValues { (_, v) -> v.map { yearOf(it.performedAt) }.distinct().sorted() }
+    }
+    // 全局年份范围，用于把年份映射成深浅
+    val yearMin = remember(activeSpots) { activeSpots.minOfOrNull { yearOf(it.performedAt) } ?: 0 }
+    val yearMax = remember(activeSpots) { activeSpots.maxOfOrNull { yearOf(it.performedAt) } ?: 0 }
+
+    /** 年份强度：最早 0（最淡），最近 1（最浓）。只有一年时给满。 */
+    fun yearStrength(year: Int): Float {
+        if (yearMax <= yearMin) return 1f
+        return ((year - yearMin).toFloat() / (yearMax - yearMin)).coerceIn(0f, 1f)
     }
 
     // 综合模式下每个城市按自己归属的板块上色；同城两板块都有就用两色的中间值
-    val citySections = remember(spots) {
-        spots.groupBy { it.adcode }.mapValues { (_, v) -> v.map { s -> s.section }.distinct() }
+    val citySections = remember(activeSpots) {
+        activeSpots.groupBy { it.adcode }.mapValues { (_, v) -> v.map { s -> s.section }.distinct() }
     }
 
     /** 单个城市的点亮色：单板块模式就是应援色，综合模式按归属混合。 */
@@ -221,7 +248,7 @@ fun ChinaMapCanvas(
                     scale = newScale
                 }
             }
-            .pointerInput(provinces, spots, scale, offset) {
+            .pointerInput(provinces, activeSpots, scale, offset) {
                 detectTapGestures { tap ->
                     val w = size.width.toFloat()
                     val h = size.height.toFloat()
@@ -235,7 +262,7 @@ fun ChinaMapCanvas(
                     val hit = provinces.firstOrNull { it.contains(vx, vy) }
                     selectedAdcode = hit?.adcode
                     if (hit != null) {
-                        val spot = spots.firstOrNull { it.adcode == hit.adcode }
+                        val spot = activeSpots.firstOrNull { it.adcode == hit.adcode }
                         if (spot != null) onSpotClick(spot)
                     }
                 }
@@ -259,15 +286,32 @@ fun ChinaMapCanvas(
             lerp(color, Color.White, 0.58f),
             darkProgress,
         )
+        /**
+         * 年份色：用透明度表达年份，不往表面色里混灰。
+         * 最浓就是应援色本身（alpha 1），最早 52% 半透——叠在深色底上自然变淡，而不是被灰色拉脏。
+         */
+        fun yearTint(color: Color, strength: Float): Color =
+            litFill(color).copy(alpha = 0.52f + 0.48f * strength)
+
         provinces.forEach { p ->
             val visited = visitedAdcodes.contains(p.adcode)
             val cityColor = if (visited) cityAccent(p.adcode) else palette.unlitCity
-            val fill = if (visited) litFill(cityColor) else palette.unlitCity
+            val years = cityYears[p.adcode].orEmpty()
             withTransform({
                 translate(dx, dy)
                 scale(k, k, pivot = Offset.Zero)
             }) {
-                drawPath(p.path, color = fill)
+                when {
+                    !visited -> drawPath(p.path, color = palette.unlitCity)
+
+                    // 年份模式：地块用「最近一年」的浓度上色，历史年份的深浅交给城市上方的年份刻度点
+                    yearLayers -> drawPath(
+                        p.path,
+                        color = yearTint(cityColor, years.lastOrNull()?.let { yearStrength(it) } ?: 1f),
+                    )
+
+                    else -> drawPath(p.path, color = litFill(cityColor))
+                }
                 if (visited) {
                     // 亮边：点亮地块像一块有厚度的亚克力，而不是扁平色块
                     drawPath(
@@ -282,6 +326,28 @@ fun ChinaMapCanvas(
                         color = if (visited) cityColor else accent,
                         style = Stroke(width = 2.5f / k),
                     )
+                }
+            }
+        }
+
+        // 年份刻度：去过两年以上的城市，在质心上方排一排小点，越早越淡。
+        // 地块本身只能填一个颜色，历史年份靠这排点表达——一眼就能看出「这座城市我去过哪几年」。
+        if (yearLayers) {
+            provinces.filter { visitedAdcodes.contains(it.adcode) }.forEach { p ->
+                val ys = cityYears[p.adcode].orEmpty()
+                if (ys.size < 2) return@forEach
+                val c = toScreen(p.label.x, p.label.y)
+                val gap = 7f
+                val r = 2.8f
+                val y = c.y - 24f
+                val startX = c.x - (ys.size - 1) * gap / 2f
+                ys.forEachIndexed { i, yv ->
+                    val dotColor = lerp(
+                        palette.unlitCity,
+                        cityAccent(p.adcode),
+                        0.40f + 0.60f * yearStrength(yv),
+                    )
+                    drawCircle(dotColor, radius = r, center = Offset(startX + i * gap, y))
                 }
             }
         }
@@ -433,7 +499,18 @@ fun ChinaMapCanvas(
             .sortedByDescending { it.bounds.width * it.bounds.height }
             .forEach { p ->
                 val layout = litLabelLayouts[p.adcode] ?: return@forEach
-                val color = cityAccent(p.adcode)
+                val base = cityAccent(p.adcode)
+                // 年份模式：名字也跟着年份变淡，早期城市不抢眼
+                val color = if (yearLayers) {
+                    val latest = cityYears[p.adcode]?.lastOrNull()
+                    if (latest != null) {
+                        lerp(lerp(base, palette.unlitCity, 0.40f), base, yearStrength(latest))
+                    } else {
+                        base
+                    }
+                } else {
+                    base
+                }
                 tryPlace(layout, p.label, color, p.bounds, 1f, emboss = embossFor(color))
             }
 
@@ -459,8 +536,8 @@ fun ChinaMapCanvas(
         }
 
         // 路线：3D 抛物线（向上拱、中间粗亮两端细淡、地面投影、飞行光点拖尾）
-        if (showRoute && route.size >= 2) {
-            route.zipWithNext { from, to ->
+        if (showRoute && activeRoute.size >= 2) {
+            activeRoute.zipWithNext { from, to ->
                 val a = toScreen(spotVirtual(from).x, spotVirtual(from).y)
                 val b = toScreen(spotVirtual(to).x, spotVirtual(to).y)
                 val ddx = b.x - a.x
@@ -520,6 +597,13 @@ private data class Emboss(
     val depth: Color,
     val glow: Color,
 )
+
+/** 时间戳转年份。 */
+private fun yearOf(timestamp: Long): Int {
+    val cal = java.util.Calendar.getInstance()
+    cal.timeInMillis = timestamp
+    return cal.get(java.util.Calendar.YEAR)
+}
 
 /** 二次贝塞尔曲线上的点。 */
 private fun quadPoint(a: Offset, c: Offset, b: Offset, t: Float): Offset {

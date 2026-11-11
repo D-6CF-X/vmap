@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
 import org.json.JSONObject
 
 /**
@@ -75,7 +76,7 @@ object ChinaMapData {
 
                 if (rings.isEmpty()) continue
 
-                val path = Path()
+                val path = Path().apply { fillType = PathFillType.EvenOdd }
                 rings.forEach { ring ->
                     ring.forEachIndexed { j, pt ->
                         if (j == 0) path.moveTo(pt.x, pt.y) else path.lineTo(pt.x, pt.y)
@@ -164,7 +165,7 @@ object ChinaMapData {
                     else -> continue
                 }
                 if (rings.isEmpty()) continue
-                val path = Path()
+                val path = Path().apply { fillType = PathFillType.EvenOdd }
                 rings.forEach { ring ->
                     ring.forEachIndexed { j, pt ->
                         if (j == 0) path.moveTo(pt.x, pt.y) else path.lineTo(pt.x, pt.y)

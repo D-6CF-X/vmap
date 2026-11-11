@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -74,6 +75,8 @@ fun MapScreen(
     val isDark by viewModel.isDark.collectAsStateWithLifecycle()
     val tags by viewModel.tags.collectAsStateWithLifecycle()
     val filterTag by viewModel.filterTag.collectAsStateWithLifecycle()
+    val yearLayers by viewModel.yearLayers.collectAsStateWithLifecycle()
+    val focusYear by viewModel.focusYear.collectAsStateWithLifecycle()
 
     var detailSpot by remember { mutableStateOf<Spot?>(null) }
 
@@ -110,6 +113,8 @@ fun MapScreen(
             animated = detailSpot == null && !dimmed,
             isDark = isDark,
             darkProgress = darkProgress,
+            yearLayers = yearLayers,
+            focusYear = focusYear,
         )
 
         Column(
@@ -126,9 +131,22 @@ fun MapScreen(
                 route = route,
                 onToggleRoute = viewModel::toggleRoute,
                 onToggleTheme = viewModel::toggleTheme,
+                onToggleYearLayers = viewModel::toggleYearLayers,
                 showRoute = showRoute,
                 isDark = isDark,
+                yearLayers = yearLayers,
             )
+
+            // 年份图例：每个去过的年份一个色点，越早越淡；点一下只看那一年
+            if (yearLayers && spots.isNotEmpty()) {
+                YearLegendBar(
+                    spots = spots,
+                    accent = accent,
+                    isDark = isDark,
+                    focusYear = focusYear,
+                    onSelect = viewModel::setFocusYear,
+                )
+            }
 
             // 综合模式下跨板块筛标签没有明确语义，先不显示
             if (tags.isNotEmpty() && board != Board.ALL) {
@@ -170,8 +188,10 @@ private fun SectionSwitchBar(
     route: List<Spot>,
     onToggleRoute: () -> Unit,
     onToggleTheme: () -> Unit,
+    onToggleYearLayers: () -> Unit,
     showRoute: Boolean,
     isDark: Boolean,
+    yearLayers: Boolean,
 ) {
     val shape = RoundedCornerShape(22.dp)
 
@@ -271,6 +291,35 @@ private fun SectionSwitchBar(
                     fontWeight = if (showRoute) FontWeight.Medium else FontWeight.Normal,
                 )
             }
+            // 年份分层开关：开启后地块按演出年份着色，越早越淡
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (yearLayers) accent.copy(alpha = 0.20f)
+                        else Color.White.copy(alpha = if (isDark) 0.05f else 0.35f),
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = if (yearLayers) accent.copy(alpha = 0.55f)
+                        else Color.White.copy(alpha = if (isDark) 0.12f else 0.55f),
+                        shape = CircleShape,
+                    )
+                    .clickable(onClick = onToggleYearLayers),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Layers,
+                    contentDescription = if (yearLayers) "关闭年份分层" else "开启年份分层",
+                    tint = if (yearLayers) {
+                        if (isDark) lerp(accent, Color.White, 0.3f) else lerp(accent, Color(0xFF08161E), 0.58f)
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    modifier = Modifier.size(17.dp),
+                )
+            }
             // 主题切换：小圆玻璃按钮
             Box(
                 modifier = Modifier
@@ -287,6 +336,93 @@ private fun SectionSwitchBar(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(17.dp),
                 )
+            }
+        }
+    }
+}
+
+/** 时间戳转年份。 */
+private fun yearOf(timestamp: Long): Int {
+    val cal = java.util.Calendar.getInstance()
+    cal.timeInMillis = timestamp
+    return cal.get(java.util.Calendar.YEAR)
+}
+
+/**
+ * 年份图例：每个去过的年份一个色点，颜色深浅就是该年在年份范围里的位置（越早越淡）。
+ * 点一下只看那一年，再点一下回到全部。
+ */
+@Composable
+private fun YearLegendBar(
+    spots: List<Spot>,
+    accent: Color,
+    isDark: Boolean,
+    focusYear: Int?,
+    onSelect: (Int?) -> Unit,
+) {
+    val years = remember(spots) { spots.map { yearOf(it.performedAt) }.distinct().sorted() }
+    if (years.isEmpty()) return
+    val minYear = years.first()
+    val maxYear = years.last()
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .glassPanel(shape = RoundedCornerShape(20.dp), isDark = isDark, accent = accent, elevation = 12.dp),
+    ) {
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            item {
+                Text(
+                    text = "年份",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                    fontSize = 10.sp,
+                    letterSpacing = 1.4.sp,
+                )
+            }
+            items(years) { year ->
+                val strength = if (maxYear <= minYear) 1f
+                else (year - minYear).toFloat() / (maxYear - minYear)
+                val selected = focusYear == year
+                Row(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(
+                            if (selected) accent.copy(alpha = 0.22f)
+                            else Color.White.copy(alpha = if (isDark) 0.05f else 0.40f),
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = if (selected) accent.copy(alpha = 0.60f)
+                            else Color.White.copy(alpha = if (isDark) 0.10f else 0.55f),
+                            shape = CircleShape,
+                        )
+                        .clickable { onSelect(year) }
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(accent.copy(alpha = 0.26f + 0.74f * strength)),
+                    )
+                    Text(
+                        text = year.toString(),
+                        color = if (selected) {
+                            if (isDark) lerp(accent, Color.White, 0.25f)
+                            else lerp(accent, Color(0xFF08161E), 0.55f)
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        fontSize = 11.sp,
+                        fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+                    )
+                }
             }
         }
     }

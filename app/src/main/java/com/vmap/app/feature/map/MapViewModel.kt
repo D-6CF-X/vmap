@@ -40,6 +40,14 @@ class MapViewModel(
     private val _isDark = MutableStateFlow(true)
     val isDark: StateFlow<Boolean> = _isDark.asStateFlow()
 
+    /** 年份分层：按演出年份深浅着色，越早越淡。默认开。 */
+    private val _yearLayers = MutableStateFlow(true)
+    val yearLayers: StateFlow<Boolean> = _yearLayers.asStateFlow()
+
+    /** 只看某一年，null 表示全年份。 */
+    private val _focusYear = MutableStateFlow<Int?>(null)
+    val focusYear: StateFlow<Int?> = _focusYear.asStateFlow()
+
     private val query = combine(_board, _section, _filterTag) { b, s, t -> Triple(b, s, t) }
 
     /** 按时间倒序，用于地图打点与列表。综合模式取全部板块。 */
@@ -110,7 +118,22 @@ class MapViewModel(
         _isDark.value = !_isDark.value
     }
 
+    fun toggleYearLayers() {
+        _yearLayers.value = !_yearLayers.value
+        if (!_yearLayers.value) _focusYear.value = null
+    }
+
+    fun setFocusYear(year: Int?) {
+        _focusYear.value = if (_focusYear.value == year) null else year
+        if (_focusYear.value != null) _yearLayers.value = true
+    }
+
     suspend fun delete(spotId: String) {
         repository.softDelete(spotId)
+    }
+
+    /** 档案页「记入足迹」用。 */
+    suspend fun save(spot: Spot) {
+        repository.save(spot)
     }
 }
