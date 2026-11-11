@@ -160,6 +160,6 @@ class MapViewModel(
     }
 
     private companion object {
-        const val KEY_ARCHIVE_SEEDED = "archive_seeded_v1"
+        const val KEY_ARCHIVE_SEEDED = "archive_seeded_v2"
     }
 }

@@ -56,11 +56,11 @@ class SongBoardViewModel(
     }
 
     /**
-     * 首次进入曲库：把内置的历年演唱会曲目（网易云曲库口径）灌进来。
+     * 把内置的历年演唱会曲目（网易云曲库口径）同步进曲库。
      *
-     * 只跑一次（SharedPreferences 打标记），已经导入过的歌按 externalId 跳过，
-     * 所以用户手动加的歌不会被动，重复启动也不会重复插。
-     * 初始档位按「在历次演唱会上唱过几次」分：唱得越多档位越高，之后可以自己拖。
+     * 每次内置档案换代（KEY_SEEDED 换版本号）跑一遍：
+     * - 新歌按 externalId 插入，并按「在历次演唱会上唱过几次」给初始档位；
+     * - 老歌只刷新年份 / 系列 / 出场次数这些场次信息，用户自己拖过的档位和顺序保持不动。
      */
     private suspend fun seedArchive() {
         val prefs = context.getSharedPreferences("vmap_seed", android.content.Context.MODE_PRIVATE)
@@ -72,11 +72,29 @@ class SongBoardViewModel(
             return
         }
 
-        val existing = dao.allExternalIds().toHashSet()
-        val incoming = archive.filter { it.id !in existing }.sortedByDescending { it.perfCount }
-        if (incoming.isEmpty()) {
-            prefs.edit().putBoolean(KEY_SEEDED, true).apply()
-            return
+        val existingSongs = dao.observeSongs().first()
+        val byExternal = existingSongs.filter { it.externalId.isNotBlank() }.associateBy { it.externalId }
+
+        val refreshed = ArrayList<Song>()
+        val incoming = ArrayList<com.vmap.app.data.song.ArchivedSong>()
+        archive.forEach { a ->
+            val old = byExternal[a.id]
+            if (old == null) {
+                incoming.add(a)
+            } else if (
+                old.years != a.years || old.tour != a.tour ||
+                old.perfCount != a.perfCount || old.album != a.album || old.series != a.series
+            ) {
+                refreshed.add(
+                    old.copy(
+                        years = a.years,
+                        tour = a.tour,
+                        perfCount = a.perfCount,
+                        album = a.album,
+                        series = a.series,
+                    ),
+                )
+            }
         }
 
         val ratings = dao.observeRatings().first().sortedBy { it.orderIndex }
@@ -90,14 +108,14 @@ class SongBoardViewModel(
         }
 
         val perTierCount = HashMap<String, Int>()
-        val rows = ArrayList<Song>(incoming.size)
-        incoming.forEach { a ->
+        val inserted = ArrayList<Song>(incoming.size)
+        incoming.sortedByDescending { it.perfCount }.forEach { a ->
             val tier = tierOf(a.perfCount)
             val idx = perTierCount[tier.id] ?: 0
             perTierCount[tier.id] = idx + 1
             val songId = "arc-${a.id}"
             val cover = coverStore.importAsset(a.coverAsset, songId).orEmpty()
-            rows.add(
+            inserted.add(
                 Song(
                     id = songId,
                     title = a.title,
@@ -116,7 +134,8 @@ class SongBoardViewModel(
                 ),
             )
         }
-        dao.upsertSongs(rows)
+        val rows = refreshed + inserted
+        if (rows.isNotEmpty()) dao.upsertSongs(rows)
         prefs.edit().putBoolean(KEY_SEEDED, true).apply()
     }
 
@@ -268,7 +287,7 @@ class SongBoardViewModel(
     private fun key(title: String, artist: String) = "${title.trim()}|${artist.trim()}".lowercase()
 
     private companion object {
-        const val KEY_SEEDED = "songs_seeded_v1"
+        const val KEY_SEEDED = "songs_seeded_v3"
     }
 
     private fun parseLine(raw: String): Triple<String, String, Int>? {

@@ -227,12 +227,12 @@ fun ChinaMapCanvas(
 
         val n = tourSpots.size
         var prevNanos = 0L
-        // 阶段时长（毫秒）
-        val flyMs = 860L
-        val burstMs = 620L
-        val flashMs = 420L
-        val onlineMs = 1500L
-        val rippleMs = 1600L
+        // 阶段时长（毫秒）。飞行放慢一点，光点走得太快根本看不清轨迹
+        val flyMs = 1500L
+        val burstMs = 800L
+        val flashMs = 450L
+        val onlineMs = 1700L
+        val rippleMs = 1900L
 
         fun playTone(step: Int) {
             // 钢琴音，逐城上行：第一座城 C4，往后一个个音往上爬
@@ -299,11 +299,12 @@ fun ChinaMapCanvas(
     }
 
     // 动画时钟。animated=false 时不读动画值，Canvas 不会被每帧失效。
+    // 整条路线走一趟 5.2s，慢一点才看得出光点在往哪走。
     val animatedFlow = rememberInfiniteTransition(label = "map").animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2600, easing = LinearEasing),
+            animation = tween(5200, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
         label = "flow",

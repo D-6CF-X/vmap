@@ -18,7 +18,9 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -54,12 +56,16 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.vmap.app.VMapApp
+import com.vmap.app.core.ui.AnimatedGif
 import com.vmap.app.core.ui.GradientTitle
 import com.vmap.app.core.ui.accent
+import com.vmap.app.data.sticker.Sticker
+import com.vmap.app.data.sticker.StickerPack
 import com.vmap.app.domain.model.Spot
 import com.vmap.app.domain.model.Tag
 import com.vmap.app.feature.map.MapViewModel
@@ -95,6 +101,9 @@ fun SpotEditSheet(
     var showVideo by remember { mutableStateOf(false) }
     var detail by remember(spot) { mutableStateOf(spot.detail) }
     var videoUrl by remember(spot) { mutableStateOf(spot.videoUrl) }
+    // 2026「纯蓝幻乐」场次带官方表情包，点开看动图
+    val stickers = remember(spot.title) { StickerPack.forSpot(spot.title) }
+    var previewSticker by remember { mutableStateOf<Sticker?>(null) }
 
     val photos by app.container.spotRepository
         .observePhotos(spot.id)
@@ -279,6 +288,51 @@ fun SpotEditSheet(
                         }
                     }
                 }
+                // 官方表情包：只有 2026「无限共鸣·纯蓝幻乐」这一套
+                if (stickers.isNotEmpty()) {
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        text = "纯蓝幻乐表情包 · ${stickers.size} 张",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        stickers.forEach { st ->
+                            item(key = st.asset) {
+                                Column(
+                                modifier = Modifier
+                                    .width(64.dp)
+                                    .clickable { previewSticker = st },
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(accent.copy(alpha = 0.10f))
+                                        .border(1.dp, accent.copy(alpha = 0.28f), RoundedCornerShape(16.dp)),
+                                ) {
+                                    // 缩略图用 Coil 取首帧（不引 coil-gif），点开才是动图
+                                    AsyncImage(
+                                        model = "file:///android_asset/${st.asset}",
+                                        contentDescription = st.label,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.size(64.dp),
+                                    )
+                                }
+                                Spacer(Modifier.height(3.dp))
+                                Text(
+                                    text = st.label,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 9.sp,
+                                    maxLines = 1,
+                                )
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             Spacer(Modifier.height(14.dp))
@@ -458,6 +512,27 @@ fun SpotEditSheet(
                 TextButton(onClick = { showNewTag = false }) { Text("取消") }
             },
         )
+    }
+
+    previewSticker?.let { st ->
+        Dialog(onDismissRequest = { previewSticker = null }) {
+            Column(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Color(0xFF0B1B26).copy(alpha = 0.94f))
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                AnimatedGif(st.asset, Modifier.size(240.dp))
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = st.label,
+                    color = accent,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
     }
 
     if (showVideo && videoUrl.isNotBlank()) {

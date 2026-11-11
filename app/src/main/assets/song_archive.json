@@ -11,29 +11,7 @@
    "series": "TIANYI",
    "tour": "Vsinger Live,洛天依&郎朗 全息演唱会,生日会,无限共鸣·流光协奏,无限共鸣·纯蓝幻乐",
    "years": "2017,2019,2020,2022,2025,2026",
-   "perf": 14
-  },
-  {
-   "id": "22677570",
-   "title": "ワールドイズマイン",
-   "artist": "初音ミク, ryo (supercell)",
-   "album": "初音ミクベスト ～memories～",
-   "cover": "song_covers/22677570.jpg",
-   "series": "MIKU",
-   "tour": "MIKU EXPO,未来有你",
-   "years": "2016,2017,2018,2019,2020,2024,2026",
-   "perf": 13
-  },
-  {
-   "id": "26115905",
-   "title": "Tell Your World",
-   "artist": "livetune, 初音ミク",
-   "album": "Re:Dial",
-   "cover": "song_covers/26115905.jpg",
-   "series": "MIKU",
-   "tour": "MIKU EXPO,未来有你",
-   "years": "2015,2016,2017,2018,2019,2020,2024",
-   "perf": 12
+   "perf": 18
   },
   {
    "id": "27908590",
@@ -44,7 +22,7 @@
    "series": "TIANYI",
    "tour": "Vsinger Live,洛天依&郎朗 全息演唱会,无限共鸣·流光协奏,无限共鸣·纯蓝幻乐",
    "years": "2017,2019,2025,2026",
-   "perf": 11
+   "perf": 15
   },
   {
    "id": "1831476078",
@@ -55,7 +33,7 @@
    "series": "TIANYI",
    "tour": "生日会,无限共鸣·流光协奏,无限共鸣·纯蓝幻乐",
    "years": "2022,2025,2026",
-   "perf": 11
+   "perf": 15
   },
   {
    "id": "550059604",
@@ -66,7 +44,7 @@
    "series": "TIANYI",
    "tour": "洛天依&郎朗 全息演唱会,无限共鸣·流光协奏,无限共鸣·纯蓝幻乐",
    "years": "2019,2025,2026",
-   "perf": 11
+   "perf": 15
   },
   {
    "id": "3386985261",
@@ -77,7 +55,7 @@
    "series": "TIANYI",
    "tour": "无限共鸣·流光协奏,无限共鸣·纯蓝幻乐",
    "years": "2025,2026",
-   "perf": 10
+   "perf": 14
   },
   {
    "id": "2124462309",
@@ -88,7 +66,7 @@
    "series": "TIANYI",
    "tour": "无限共鸣·流光协奏,无限共鸣·纯蓝幻乐",
    "years": "2025,2026",
-   "perf": 10
+   "perf": 14
   },
   {
    "id": "1299289240",
@@ -99,7 +77,7 @@
    "series": "TIANYI",
    "tour": "无限共鸣·流光协奏,无限共鸣·纯蓝幻乐",
    "years": "2025,2026",
-   "perf": 10
+   "perf": 14
   },
   {
    "id": "2604527599",
@@ -110,6 +88,72 @@
    "series": "TIANYI",
    "tour": "无限共鸣·流光协奏,无限共鸣·纯蓝幻乐",
    "years": "2025,2026",
+   "perf": 14
+  },
+  {
+   "id": "22677570",
+   "title": "ワールドイズマイン",
+   "artist": "初音ミク, ryo (supercell)",
+   "album": "初音ミクベスト ～memories～",
+   "cover": "song_covers/22677570.jpg",
+   "series": "MIKU",
+   "tour": "MIKU EXPO 中国巡演,未来有你",
+   "years": "2016,2017,2018,2019,2020,2024,2026",
+   "perf": 13
+  },
+  {
+   "id": "2131661254",
+   "title": "病态主角观",
+   "artist": "洛天依, 4st",
+   "album": "「BLACKMOON」企划",
+   "cover": "song_covers/2131661254.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·流光协奏,无限共鸣·纯蓝幻乐",
+   "years": "2025,2026",
+   "perf": 13
+  },
+  {
+   "id": "26115905",
+   "title": "Tell Your World",
+   "artist": "livetune, 初音ミク",
+   "album": "Re:Dial",
+   "cover": "song_covers/26115905.jpg",
+   "series": "MIKU",
+   "tour": "MIKU EXPO,MIKU EXPO 中国巡演,未来有你",
+   "years": "2015,2016,2017,2018,2019,2020,2024",
+   "perf": 12
+  },
+  {
+   "id": "2725662545",
+   "title": "权御天下 (2025官方重置版)",
+   "artist": "洛天依Official",
+   "album": "权御天下 (2025官方重置版)",
+   "cover": "song_covers/2725662545.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·流光协奏,无限共鸣·纯蓝幻乐",
+   "years": "2025,2026",
+   "perf": 12
+  },
+  {
+   "id": "1461644515",
+   "title": "万分之一的光",
+   "artist": "洛天依Official",
+   "album": "Moments",
+   "cover": "song_covers/1461644515.jpg",
+   "series": "TIANYI",
+   "tour": "生日会,无限共鸣·纯蓝幻乐",
+   "years": "2020,2022,2026",
+   "perf": 10
+  },
+  {
+   "id": "359939",
+   "title": "千年食谱颂",
+   "artist": "洛天依Official",
+   "album": "千年食谱颂",
+   "cover": "song_covers/359939.jpg",
+   "series": "TIANYI",
+   "tour": "Vsinger Live,洛天依&郎朗 全息演唱会,无限共鸣·纯蓝幻乐",
+   "years": "2017,2019,2026",
    "perf": 10
   },
   {
@@ -124,6 +168,28 @@
    "perf": 9
   },
   {
+   "id": "2748721768",
+   "title": "众生的",
+   "artist": "洛天依Official, JUSF周存",
+   "album": "闪耀",
+   "cover": "song_covers/2748721768.jpg",
+   "series": "TIANYI",
+   "tour": "生日会,无限共鸣·纯蓝幻乐",
+   "years": "2026",
+   "perf": 9
+  },
+  {
+   "id": "1345872140",
+   "title": "勾指起誓",
+   "artist": "洛天依Official, ilem",
+   "album": "2:3",
+   "cover": "song_covers/1345872140.jpg",
+   "series": "TIANYI",
+   "tour": "生日会,无限共鸣·纯蓝幻乐",
+   "years": "2022,2026",
+   "perf": 9
+  },
+  {
    "id": "30854398",
    "title": "权御天下",
    "artist": "洛天依Official, 乌龟Sui",
@@ -135,14 +201,14 @@
    "perf": 9
   },
   {
-   "id": "2131661254",
-   "title": "病态主角观",
-   "artist": "洛天依, 4st",
-   "album": "「BLACKMOON」企划",
-   "cover": "song_covers/2131661254.jpg",
+   "id": "2745770683",
+   "title": "珍珠",
+   "artist": "洛天依, 镜星Himawari_咕咕p",
+   "album": "【洛天依×言和×乐正绫】珍珠【ACE COVER】",
+   "cover": "song_covers/2745770683.jpg",
    "series": "TIANYI",
    "tour": "无限共鸣·流光协奏,无限共鸣·纯蓝幻乐",
-   "years": "2025,2026",
+   "years": "2026",
    "perf": 9
   },
   {
@@ -155,6 +221,17 @@
    "tour": "生日会,无限共鸣·流光协奏,无限共鸣·纯蓝幻乐",
    "years": "2022,2025,2026",
    "perf": 9
+  },
+  {
+   "id": "3402764244",
+   "title": "Monologue",
+   "artist": "洛天依Official",
+   "album": "四重奏",
+   "cover": "song_covers/3402764244.jpg",
+   "series": "TIANYI",
+   "tour": "生日会,无限共鸣·纯蓝幻乐",
+   "years": "2026",
+   "perf": 8
   },
   {
    "id": "27510174",
@@ -179,6 +256,28 @@
    "perf": 8
   },
   {
+   "id": "2709782550",
+   "title": "下等马",
+   "artist": "洛天依Official, ChiliChill乐团",
+   "album": "闪耀",
+   "cover": "song_covers/2709782550.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·纯蓝幻乐",
+   "years": "2026",
+   "perf": 8
+  },
+  {
+   "id": "2646266392",
+   "title": "但我讨厌摇滚乐",
+   "artist": "停電前夜",
+   "album": "世界梦游",
+   "cover": "song_covers/2646266392.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·纯蓝幻乐",
+   "years": "2026",
+   "perf": 8
+  },
+  {
    "id": "1963053471",
    "title": "光与影的对白",
    "artist": "洛天依Official",
@@ -187,6 +286,17 @@
    "series": "TIANYI",
    "tour": "生日会,无限共鸣·流光协奏,无限共鸣·纯蓝幻乐",
    "years": "2022,2025,2026",
+   "perf": 8
+  },
+  {
+   "id": "3330630999",
+   "title": "反乌托邦Pt.2",
+   "artist": "亞細亞曠世奇才, 洛天依Official, 乌托邦P",
+   "album": "反乌托邦Pt.2",
+   "cover": "song_covers/3330630999.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·纯蓝幻乐",
+   "years": "2026",
    "perf": 8
   },
   {
@@ -201,14 +311,91 @@
    "perf": 8
   },
   {
-   "id": "2725662545",
-   "title": "权御天下 (2025官方重置版)",
-   "artist": "洛天依Official",
-   "album": "权御天下 (2025官方重置版)",
-   "cover": "song_covers/2725662545.jpg",
+   "id": "2120083042",
+   "title": "夜航星",
+   "artist": "洛天依",
+   "album": "夜航星",
+   "cover": "song_covers/2120083042.jpg",
    "series": "TIANYI",
-   "tour": "无限共鸣·流光协奏,无限共鸣·纯蓝幻乐",
-   "years": "2025,2026",
+   "tour": "无限共鸣·纯蓝幻乐",
+   "years": "2026",
+   "perf": 8
+  },
+  {
+   "id": "510213198",
+   "title": "大小姐和大少爷的反派生涯",
+   "artist": "JUSF周存, 洛天依Official",
+   "album": "大小姐和大少爷的反派生涯",
+   "cover": "song_covers/510213198.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·纯蓝幻乐",
+   "years": "2026",
+   "perf": 8
+  },
+  {
+   "id": "2668141354",
+   "title": "天星问（2025哔哩哔哩拜年纪单品）",
+   "artist": "洛天依",
+   "album": "2025哔哩哔哩拜年纪",
+   "cover": "song_covers/2668141354.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·纯蓝幻乐",
+   "years": "2026",
+   "perf": 8
+  },
+  {
+   "id": "3324479423",
+   "title": "完美劲敌",
+   "artist": "洛天依Official",
+   "album": "完美劲敌",
+   "cover": "song_covers/3324479423.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·纯蓝幻乐",
+   "years": "2026",
+   "perf": 8
+  },
+  {
+   "id": "3412701570",
+   "title": "来自瓦纳海姆",
+   "artist": "litterzy, 洛天依",
+   "album": "来自瓦纳海姆【洛天依十周年同人生日会】",
+   "cover": "song_covers/3412701570.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·纯蓝幻乐",
+   "years": "2026",
+   "perf": 8
+  },
+  {
+   "id": "32785784",
+   "title": "蔷薇革命",
+   "artist": "洛天依Official",
+   "album": "蔷薇革命",
+   "cover": "song_covers/32785784.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·纯蓝幻乐",
+   "years": "2026",
+   "perf": 8
+  },
+  {
+   "id": "3407502422",
+   "title": "越冰船",
+   "artist": "天冷记得天依, 洛天依",
+   "album": "越冰船",
+   "cover": "song_covers/3407502422.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·纯蓝幻乐",
+   "years": "2026",
+   "perf": 8
+  },
+  {
+   "id": "3348917312",
+   "title": "辟浪",
+   "artist": "哔哩哔哩拜年纪, 洛天依Official",
+   "album": "2026哔哩哔哩拜年纪",
+   "cover": "song_covers/3348917312.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·纯蓝幻乐",
+   "years": "2026",
    "perf": 8
   },
   {
@@ -220,6 +407,17 @@
    "series": "TIANYI",
    "tour": "Vsinger Live,洛天依&郎朗 全息演唱会,无限共鸣·流光协奏",
    "years": "2017,2019,2025,2026",
+   "perf": 8
+  },
+  {
+   "id": "2749467359",
+   "title": "黑洞",
+   "artist": "洛天依Official, CLSTR 56, MORTEN, TerryZhong钟天利",
+   "album": "High",
+   "cover": "song_covers/2749467359.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·纯蓝幻乐",
+   "years": "2026",
    "perf": 8
   },
   {
@@ -245,11 +443,66 @@
    "perf": 7
   },
   {
+   "id": "1493525870",
+   "title": "唱给世界的歌 feat.洛天依",
+   "artist": "iKz, 洛天依Official",
+   "album": "唱给世界的歌",
+   "cover": "song_covers/1493525870.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·纯蓝幻乐",
+   "years": "2026",
+   "perf": 7
+  },
+  {
+   "id": "27928000",
+   "title": "唱给雅音宫羽",
+   "artist": "洛天依Official",
+   "album": "热门华语160",
+   "cover": "song_covers/27928000.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·纯蓝幻乐",
+   "years": "2026",
+   "perf": 7
+  },
+  {
+   "id": "2657393088",
+   "title": "戏游九州",
+   "artist": "洛天依Official",
+   "album": "戏游九州",
+   "cover": "song_covers/2657393088.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·流光协奏,无限共鸣·纯蓝幻乐",
+   "years": "2025,2026",
+   "perf": 7
+  },
+  {
+   "id": "1439814454",
+   "title": "我的悲伤是水做的",
+   "artist": "ChiliChill乐团, 洛天依Official",
+   "album": "我的悲伤是水做的",
+   "cover": "song_covers/1439814454.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·流光协奏,无限共鸣·纯蓝幻乐",
+   "years": "2025,2026",
+   "perf": 7
+  },
+  {
    "id": "2078368206",
    "title": "歌行四方",
    "artist": "洛天依Official",
    "album": "歌行四方",
    "cover": "song_covers/2078368206.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·流光协奏,无限共鸣·纯蓝幻乐",
+   "years": "2025,2026",
+   "perf": 7
+  },
+  {
+   "id": "2714230443",
+   "title": "流光 (Light Me Up)",
+   "artist": "洛天依Official",
+   "album": "流光 (Light Me Up)",
+   "cover": "song_covers/2714230443.jpg",
    "series": "TIANYI",
    "tour": "无限共鸣·流光协奏,无限共鸣·纯蓝幻乐",
    "years": "2025,2026",
@@ -273,7 +526,7 @@
    "album": "ODDS&ENDS/Sky of Beginning",
    "cover": "song_covers/825298.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO,未来有你",
+   "tour": "MIKU EXPO,MIKU EXPO 中国巡演,未来有你",
    "years": "2015,2016,2018",
    "perf": 6
   },
@@ -286,17 +539,6 @@
    "series": "MIKU",
    "tour": "未来有你",
    "years": "2018,2024",
-   "perf": 6
-  },
-  {
-   "id": "1461644515",
-   "title": "万分之一的光",
-   "artist": "洛天依Official",
-   "album": "Moments",
-   "cover": "song_covers/1461644515.jpg",
-   "series": "TIANYI",
-   "tour": "生日会,无限共鸣·纯蓝幻乐",
-   "years": "2020,2022,2026",
    "perf": 6
   },
   {
@@ -319,17 +561,6 @@
    "series": "TIANYI",
    "tour": "无限共鸣·流光协奏",
    "years": "2025,2026",
-   "perf": 6
-  },
-  {
-   "id": "359939",
-   "title": "千年食谱颂",
-   "artist": "洛天依Official",
-   "album": "千年食谱颂",
-   "cover": "song_covers/359939.jpg",
-   "series": "TIANYI",
-   "tour": "Vsinger Live,洛天依&郎朗 全息演唱会,无限共鸣·纯蓝幻乐",
-   "years": "2017,2019,2026",
    "perf": 6
   },
   {
@@ -366,46 +597,24 @@
    "perf": 6
   },
   {
-   "id": "2657393088",
-   "title": "戏游九州",
-   "artist": "洛天依Official",
-   "album": "戏游九州",
-   "cover": "song_covers/2657393088.jpg",
-   "series": "TIANYI",
-   "tour": "无限共鸣·流光协奏",
-   "years": "2025,2026",
-   "perf": 6
-  },
-  {
-   "id": "1439814454",
-   "title": "我的悲伤是水做的",
-   "artist": "ChiliChill乐团, 洛天依Official",
-   "album": "我的悲伤是水做的",
-   "cover": "song_covers/1439814454.jpg",
-   "series": "TIANYI",
-   "tour": "无限共鸣·流光协奏",
-   "years": "2025,2026",
-   "perf": 6
-  },
-  {
    "id": "417953304",
    "title": "気まぐれメルシィ",
    "artist": "P*Light, 初音ミク",
    "album": "Eight -THE BEST OF 八王子P-",
    "cover": "song_covers/417953304.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO,未来有你",
+   "tour": "MIKU EXPO 中国巡演,未来有你",
    "years": "2016,2017,2018",
    "perf": 6
   },
   {
-   "id": "2714230443",
-   "title": "流光 (Light Me Up)",
+   "id": "2681734305",
+   "title": "聘书",
    "artist": "洛天依Official",
-   "album": "流光 (Light Me Up)",
-   "cover": "song_covers/2714230443.jpg",
+   "album": "聘书",
+   "cover": "song_covers/2681734305.jpg",
    "series": "TIANYI",
-   "tour": "无限共鸣·流光协奏",
+   "tour": "无限共鸣·流光协奏,无限共鸣·纯蓝幻乐",
    "years": "2025,2026",
    "perf": 6
   },
@@ -449,7 +658,7 @@
    "album": "HATSUNE MIKU EXPO 2016 E.P.",
    "cover": "song_covers/406716111.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO,未来有你",
+   "tour": "MIKU EXPO 中国巡演,未来有你",
    "years": "2016,2024",
    "perf": 5
   },
@@ -482,7 +691,7 @@
    "album": "HATSUNE MIKU EXPO 2016 E.P.",
    "cover": "song_covers/406716116.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO,未来有你",
+   "tour": "MIKU EXPO 中国巡演,未来有你",
    "years": "2016,2024",
    "perf": 5
   },
@@ -493,7 +702,7 @@
    "album": "Project DIVA-F Complete Collection",
    "cover": "song_covers/26124553.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO,未来有你",
+   "tour": "MIKU EXPO,MIKU EXPO 中国巡演,未来有你",
    "years": "2015,2016,2021,2025",
    "perf": 5
   },
@@ -520,17 +729,6 @@
    "perf": 5
   },
   {
-   "id": "2748721768",
-   "title": "众生的",
-   "artist": "洛天依Official, JUSF周存",
-   "album": "闪耀",
-   "cover": "song_covers/2748721768.jpg",
-   "series": "TIANYI",
-   "tour": "生日会,无限共鸣·纯蓝幻乐",
-   "years": "2026",
-   "perf": 5
-  },
-  {
    "id": "1294899572",
    "title": "劣等上等",
    "artist": "鏡音リン, 鏡音レン, Giga",
@@ -539,17 +737,6 @@
    "series": "MIKU",
    "tour": "未来有你",
    "years": "2018,2019,2020",
-   "perf": 5
-  },
-  {
-   "id": "1345872140",
-   "title": "勾指起誓",
-   "artist": "洛天依Official, ilem",
-   "album": "2:3",
-   "cover": "song_covers/1345872140.jpg",
-   "series": "TIANYI",
-   "tour": "生日会,无限共鸣·纯蓝幻乐",
-   "years": "2022,2026",
    "perf": 5
   },
   {
@@ -619,6 +806,17 @@
    "perf": 5
   },
   {
+   "id": "1811118471",
+   "title": "洛天依-黑凤梨（Lorxnor remix）",
+   "artist": "Lorxnor",
+   "album": "节奏向",
+   "cover": "song_covers/1811118471.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·纯蓝幻乐",
+   "years": "2026",
+   "perf": 5
+  },
+  {
    "id": "2726347807",
    "title": "流光 Light Me Up (日语版)",
    "artist": "洛天依Official",
@@ -627,17 +825,6 @@
    "series": "TIANYI",
    "tour": "无限共鸣·流光协奏",
    "years": "2025",
-   "perf": 5
-  },
-  {
-   "id": "2745770683",
-   "title": "珍珠",
-   "artist": "洛天依, 镜星Himawari_咕咕p",
-   "album": "【洛天依×言和×乐正绫】珍珠【ACE COVER】",
-   "cover": "song_covers/2745770683.jpg",
-   "series": "TIANYI",
-   "tour": "无限共鸣·流光协奏,无限共鸣·纯蓝幻乐",
-   "years": "2026",
    "perf": 5
   },
   {
@@ -663,24 +850,13 @@
    "perf": 5
   },
   {
-   "id": "2681734305",
-   "title": "聘书",
-   "artist": "洛天依Official",
-   "album": "聘书",
-   "cover": "song_covers/2681734305.jpg",
-   "series": "TIANYI",
-   "tour": "无限共鸣·流光协奏",
-   "years": "2025",
-   "perf": 5
-  },
-  {
    "id": "858524",
    "title": "39",
    "artist": "DECO*27, sasakure.UK, 初音ミク",
    "album": "初音ミク 5thバースデー ベスト ~memories~",
    "cover": "song_covers/858524.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO,未来有你",
+   "tour": "MIKU EXPO,MIKU EXPO 中国巡演,未来有你",
    "years": "2015,2016,2025",
    "perf": 4
   },
@@ -702,19 +878,8 @@
    "album": "EXIT TUNES PRESENTS Megurhythm feat. Megurine Luka",
    "cover": "song_covers/22716835.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO,未来有你",
+   "tour": "MIKU EXPO,MIKU EXPO 中国巡演,未来有你",
    "years": "2015,2016,2019",
-   "perf": 4
-  },
-  {
-   "id": "3402764244",
-   "title": "Monologue",
-   "artist": "洛天依Official",
-   "album": "四重奏",
-   "cover": "song_covers/3402764244.jpg",
-   "series": "TIANYI",
-   "tour": "生日会,无限共鸣·纯蓝幻乐",
-   "years": "2026",
    "perf": 4
   },
   {
@@ -735,7 +900,7 @@
    "album": "Conti New",
    "cover": "song_covers/28364360.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO,未来有你",
+   "tour": "MIKU EXPO 中国巡演,未来有你",
    "years": "2016,2018",
    "perf": 4
   },
@@ -757,7 +922,7 @@
    "album": "「マジカルミライ2015」OFFICIAL ALBUM",
    "cover": "song_covers/33937480.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO,未来有你",
+   "tour": "MIKU EXPO 中国巡演,未来有你",
    "years": "2016,2017,2025",
    "perf": 4
   },
@@ -773,146 +938,14 @@
    "perf": 4
   },
   {
-   "id": "2709782550",
-   "title": "下等马",
-   "artist": "洛天依Official, ChiliChill乐团",
-   "album": "闪耀",
-   "cover": "song_covers/2709782550.jpg",
-   "series": "TIANYI",
-   "tour": "无限共鸣·纯蓝幻乐",
-   "years": "2026",
-   "perf": 4
-  },
-  {
-   "id": "2646266392",
-   "title": "但我讨厌摇滚乐",
-   "artist": "停電前夜",
-   "album": "世界梦游",
-   "cover": "song_covers/2646266392.jpg",
-   "series": "TIANYI",
-   "tour": "无限共鸣·纯蓝幻乐",
-   "years": "2026",
-   "perf": 4
-  },
-  {
    "id": "4888319",
    "title": "初音ミクの激唱",
    "artist": "cosMo@暴走P, 初音ミク",
    "album": "初音ミク-Project DIVA- 2nd NONSTOP MIX COLLECTION",
    "cover": "song_covers/4888319.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO,未来有你",
+   "tour": "MIKU EXPO,MIKU EXPO 中国巡演,未来有你",
    "years": "2015,2016,2017",
-   "perf": 4
-  },
-  {
-   "id": "3330630999",
-   "title": "反乌托邦Pt.2",
-   "artist": "亞細亞曠世奇才, 洛天依Official, 乌托邦P",
-   "album": "反乌托邦Pt.2",
-   "cover": "song_covers/3330630999.jpg",
-   "series": "TIANYI",
-   "tour": "无限共鸣·纯蓝幻乐",
-   "years": "2026",
-   "perf": 4
-  },
-  {
-   "id": "2120083042",
-   "title": "夜航星",
-   "artist": "洛天依",
-   "album": "夜航星",
-   "cover": "song_covers/2120083042.jpg",
-   "series": "TIANYI",
-   "tour": "无限共鸣·纯蓝幻乐",
-   "years": "2026",
-   "perf": 4
-  },
-  {
-   "id": "510213198",
-   "title": "大小姐和大少爷的反派生涯",
-   "artist": "JUSF周存, 洛天依Official",
-   "album": "大小姐和大少爷的反派生涯",
-   "cover": "song_covers/510213198.jpg",
-   "series": "TIANYI",
-   "tour": "无限共鸣·纯蓝幻乐",
-   "years": "2026",
-   "perf": 4
-  },
-  {
-   "id": "2668141354",
-   "title": "天星问（2025哔哩哔哩拜年纪单品）",
-   "artist": "洛天依",
-   "album": "2025哔哩哔哩拜年纪",
-   "cover": "song_covers/2668141354.jpg",
-   "series": "TIANYI",
-   "tour": "无限共鸣·纯蓝幻乐",
-   "years": "2026",
-   "perf": 4
-  },
-  {
-   "id": "3324479423",
-   "title": "完美劲敌",
-   "artist": "洛天依Official",
-   "album": "完美劲敌",
-   "cover": "song_covers/3324479423.jpg",
-   "series": "TIANYI",
-   "tour": "无限共鸣·纯蓝幻乐",
-   "years": "2026",
-   "perf": 4
-  },
-  {
-   "id": "3412701570",
-   "title": "来自瓦纳海姆",
-   "artist": "litterzy, 洛天依",
-   "album": "来自瓦纳海姆【洛天依十周年同人生日会】",
-   "cover": "song_covers/3412701570.jpg",
-   "series": "TIANYI",
-   "tour": "无限共鸣·纯蓝幻乐",
-   "years": "2026",
-   "perf": 4
-  },
-  {
-   "id": "32785784",
-   "title": "蔷薇革命",
-   "artist": "洛天依Official",
-   "album": "蔷薇革命",
-   "cover": "song_covers/32785784.jpg",
-   "series": "TIANYI",
-   "tour": "无限共鸣·纯蓝幻乐",
-   "years": "2026",
-   "perf": 4
-  },
-  {
-   "id": "3407502422",
-   "title": "越冰船",
-   "artist": "天冷记得天依, 洛天依",
-   "album": "越冰船",
-   "cover": "song_covers/3407502422.jpg",
-   "series": "TIANYI",
-   "tour": "无限共鸣·纯蓝幻乐",
-   "years": "2026",
-   "perf": 4
-  },
-  {
-   "id": "3348917312",
-   "title": "辟浪",
-   "artist": "哔哩哔哩拜年纪, 洛天依Official",
-   "album": "2026哔哩哔哩拜年纪",
-   "cover": "song_covers/3348917312.jpg",
-   "series": "TIANYI",
-   "tour": "无限共鸣·纯蓝幻乐",
-   "years": "2026",
-   "perf": 4
-  },
-  {
-   "id": "2749467359",
-   "title": "黑洞",
-   "artist": "洛天依Official, CLSTR 56, MORTEN, TerryZhong钟天利",
-   "album": "High",
-   "cover": "song_covers/2749467359.jpg",
-   "series": "TIANYI",
-   "tour": "无限共鸣·纯蓝幻乐",
-   "years": "2026",
    "perf": 4
   },
   {
@@ -955,7 +988,7 @@
    "album": "初音ミク-Project DIVA- 2nd NONSTOP MIX COLLECTION",
    "cover": "song_covers/4888336.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO",
+   "tour": "MIKU EXPO,MIKU EXPO 中国巡演",
    "years": "2015,2016",
    "perf": 3
   },
@@ -999,7 +1032,7 @@
    "album": "初音ミクベスト ～impacts～",
    "cover": "song_covers/22677560.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO",
+   "tour": "MIKU EXPO,MIKU EXPO 中国巡演",
    "years": "2015,2016",
    "perf": 3
   },
@@ -1120,7 +1153,7 @@
    "album": "いーあるふぁんくらぶ (1) 特装版",
    "cover": "song_covers/28936450.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO,未来有你",
+   "tour": "MIKU EXPO 中国巡演,未来有你",
    "years": "2016,2017",
    "perf": 3
   },
@@ -1164,7 +1197,7 @@
    "album": "Unhappy Refrain",
    "cover": "song_covers/22699089.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO,未来有你",
+   "tour": "MIKU EXPO 中国巡演,未来有你",
    "years": "2016,2019",
    "perf": 3
   },
@@ -1263,30 +1296,8 @@
    "album": "EXIT TUNES PRESENTS Vocalogenesis",
    "cover": "song_covers/4888609.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO",
+   "tour": "MIKU EXPO,MIKU EXPO 中国巡演",
    "years": "2015,2016",
-   "perf": 3
-  },
-  {
-   "id": "1493525870",
-   "title": "唱给世界的歌 feat.洛天依",
-   "artist": "iKz, 洛天依Official",
-   "album": "唱给世界的歌",
-   "cover": "song_covers/1493525870.jpg",
-   "series": "TIANYI",
-   "tour": "无限共鸣·纯蓝幻乐",
-   "years": "2026",
-   "perf": 3
-  },
-  {
-   "id": "27928000",
-   "title": "唱给雅音宫羽",
-   "artist": "洛天依Official",
-   "album": "热门华语160",
-   "cover": "song_covers/27928000.jpg",
-   "series": "TIANYI",
-   "tour": "无限共鸣·纯蓝幻乐",
-   "years": "2026",
    "perf": 3
   },
   {
@@ -1318,7 +1329,7 @@
    "album": "初耳",
    "cover": "song_covers/4884475.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO",
+   "tour": "MIKU EXPO,MIKU EXPO 中国巡演",
    "years": "2015,2016",
    "perf": 3
   },
@@ -1329,7 +1340,7 @@
    "album": "花束~the best of doriko feat.初音ミク~",
    "cover": "song_covers/22635188.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO,未来有你",
+   "tour": "MIKU EXPO 中国巡演,未来有你",
    "years": "2016,2017",
    "perf": 3
   },
@@ -1340,7 +1351,7 @@
    "album": "EXIT TUNES PRESENTS Vocalogemini feat. Kagamine Rin, Kagamine Len",
    "cover": "song_covers/22716867.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO",
+   "tour": "MIKU EXPO,MIKU EXPO 中国巡演",
    "years": "2015,2016",
    "perf": 3
   },
@@ -1351,7 +1362,7 @@
    "album": "EXIT TUNES PRESENTS Vocalolegend feat. 初音ミク",
    "cover": "song_covers/22717349.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO",
+   "tour": "MIKU EXPO,MIKU EXPO 中国巡演",
    "years": "2015,2016",
    "perf": 3
   },
@@ -1516,7 +1527,7 @@
    "album": "「マジカルミライ2015」OFFICIAL ALBUM",
    "cover": "song_covers/33937486.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO",
+   "tour": "MIKU EXPO 中国巡演",
    "years": "2016",
    "perf": 2
   },
@@ -1670,7 +1681,7 @@
    "album": "DECO*27 VOCALOID COLLECTION 2008～2012",
    "cover": "song_covers/28152549.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO",
+   "tour": "MIKU EXPO 中国巡演",
    "years": "2016",
    "perf": 2
   },
@@ -1780,7 +1791,7 @@
    "album": "積乱雲グラフィティ/Fallin' Fallin' Fallin'",
    "cover": "song_covers/28912457.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO",
+   "tour": "MIKU EXPO 中国巡演",
    "years": "2016",
    "perf": 2
   },
@@ -1791,7 +1802,7 @@
    "album": "最新热歌慢摇105",
    "cover": "song_covers/33756124.jpg",
    "series": "MIKU",
-   "tour": "MIKU EXPO",
+   "tour": "MIKU EXPO 中国巡演",
    "years": "2016",
    "perf": 2
   },
@@ -1814,6 +1825,17 @@
    "cover": "song_covers/3355874745.jpg",
    "series": "MIKU",
    "tour": "未来有你",
+   "years": "2026",
+   "perf": 2
+  },
+  {
+   "id": "2647857685",
+   "title": "贱侠 (洛天依版)",
+   "artist": "阿萨Aza, 洛天依Official, Evalia",
+   "album": "贱侠",
+   "cover": "song_covers/2647857685.jpg",
+   "series": "TIANYI",
+   "tour": "生日会,无限共鸣·纯蓝幻乐",
    "years": "2026",
    "perf": 2
   },
@@ -2687,6 +2709,17 @@
    "perf": 1
   },
   {
+   "id": "3402764813",
+   "title": "异样的风暴中心 feat.电气樱桃",
+   "artist": "洛天依Official, 电气樱桃",
+   "album": "四重奏",
+   "cover": "song_covers/3402764813.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·纯蓝幻乐",
+   "years": "2026",
+   "perf": 1
+  },
+  {
    "id": "1979007495",
    "title": "心印",
    "artist": "洛天依Official",
@@ -2830,6 +2863,17 @@
    "perf": 1
   },
   {
+   "id": "2062921141",
+   "title": "月华舞",
+   "artist": "洛天依Official",
+   "album": "月华舞",
+   "cover": "song_covers/2062921141.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·纯蓝幻乐",
+   "years": "2026",
+   "perf": 1
+  },
+  {
    "id": "1382507514",
    "title": "月西江",
    "artist": "SolPie, 初音ミク",
@@ -2849,6 +2893,17 @@
    "series": "TIANYI",
    "tour": "生日会",
    "years": "2019",
+   "perf": 1
+  },
+  {
+   "id": "1854100697",
+   "title": "杠上开花 feat.洛天依 & 言和",
+   "artist": "iKz",
+   "album": "杠上开花",
+   "cover": "song_covers/1854100697.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·纯蓝幻乐",
+   "years": "2026",
    "perf": 1
   },
   {
@@ -2940,11 +2995,11 @@
    "perf": 1
   },
   {
-   "id": "1811118471",
-   "title": "洛天依-黑凤梨（Lorxnor remix）",
-   "artist": "Lorxnor",
-   "album": "节奏向",
-   "cover": "song_covers/1811118471.jpg",
+   "id": "2155835730",
+   "title": "此刻Memories (洛天依ver)",
+   "artist": "洛天依",
+   "album": "哔哩哔哩宅舞嘉年华(BDF2024)",
+   "cover": "song_covers/2155835730.jpg",
    "series": "TIANYI",
    "tour": "无限共鸣·纯蓝幻乐",
    "years": "2026",
@@ -2970,6 +3025,17 @@
    "series": "TIANYI",
    "tour": "生日会",
    "years": "2020",
+   "perf": 1
+  },
+  {
+   "id": "3430462375",
+   "title": "淑女的品格",
+   "artist": "洛天依Official, 阿肆",
+   "album": "一一",
+   "cover": "song_covers/3430462375.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·纯蓝幻乐",
+   "years": "2026",
    "perf": 1
   },
   {
@@ -3182,6 +3248,17 @@
    "perf": 1
   },
   {
+   "id": "2687214827",
+   "title": "见面是最棒的事",
+   "artist": "Kevinz, 徵羽摩柯, 洛天依",
+   "album": "蜉蝣航标",
+   "cover": "song_covers/2687214827.jpg",
+   "series": "TIANYI",
+   "tour": "无限共鸣·纯蓝幻乐",
+   "years": "2026",
+   "perf": 1
+  },
+  {
    "id": "410161057",
    "title": "谷雨",
    "artist": "桑葚上的猴子",
@@ -3204,13 +3281,13 @@
    "perf": 1
   },
   {
-   "id": "2647857685",
-   "title": "贱侠 (洛天依版)",
-   "artist": "阿萨Aza, 洛天依Official, Evalia",
-   "album": "贱侠",
-   "cover": "song_covers/2647857685.jpg",
+   "id": "1979450648",
+   "title": "逃跑的天使",
+   "artist": "伊野奏",
+   "album": "逃跑的天使",
+   "cover": "song_covers/1979450648.jpg",
    "series": "TIANYI",
-   "tour": "生日会",
+   "tour": "无限共鸣·纯蓝幻乐",
    "years": "2026",
    "perf": 1
   },

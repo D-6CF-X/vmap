@@ -1,6 +1,7 @@
 package com.vmap.app.feature.timeline
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,11 +20,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,6 +50,7 @@ import com.vmap.app.feature.map.MapViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 /** 一个月里的一组演出，时间线按月份分段。 */
 private data class MonthGroup(
@@ -74,6 +84,10 @@ fun TimelineScreen(
     }
 
     val cityCount = chronological.map { it.adcode }.distinct().size
+
+    // 删除要二次确认：点卡片上的垃圾桶先把这场存进待删，确认后才真的 softDelete
+    var pendingDelete by remember { mutableStateOf<Spot?>(null) }
+    val scope = rememberCoroutineScope()
 
     if (chronological.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -115,9 +129,37 @@ fun TimelineScreen(
                     accent = accent,
                     isDark = isDark,
                     isLast = spot.id == group.spots.last().id,
+                    onDelete = { pendingDelete = spot },
                 )
             }
         }
+    }
+
+    pendingDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("删除这场演出？") },
+            text = {
+                Text(
+                    buildString {
+                        append(target.cityName)
+                        append(" · ")
+                        append(target.title.ifBlank { "演出" })
+                        append('\n')
+                        append("删除后地图上的这条足迹和对应的一次点亮也会一起消失。")
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch { viewModel.delete(target.id) }
+                    pendingDelete = null
+                }) { Text("删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text("取消") }
+            },
+        )
     }
 }
 
@@ -163,6 +205,7 @@ private fun TimelineCard(
     accent: Color,
     isDark: Boolean,
     isLast: Boolean,
+    onDelete: () -> Unit,
 ) {
     val shape = RoundedCornerShape(18.dp)
     Row(
@@ -229,11 +272,28 @@ private fun TimelineCard(
                     fontWeight = FontWeight.SemiBold,
                     letterSpacing = 0.8.sp,
                 )
-                Text(
-                    text = spot.cityName,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = spot.cityName,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .clickable(onClick = onDelete),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Delete,
+                            contentDescription = "删除这场演出",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                            modifier = Modifier.size(15.dp),
+                        )
+                    }
+                }
             }
             Spacer(Modifier.height(6.dp))
             Text(

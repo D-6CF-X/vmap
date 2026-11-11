@@ -31,11 +31,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -84,6 +86,22 @@ fun MapScreen(
     var tourPlaying by remember { mutableStateOf(false) }
     // 每次点年份递增，用来重启动画（点同一年也能重播）
     var tourRunId by remember { mutableIntStateOf(0) }
+
+    // 点年份后先记下「想播哪一年」，等 focusYear 这个 StateFlow 真的生效、tourSpots 跟着重算完再开播。
+    // 否则动画会拿着上一份列表先跑一段，第一座城永远是 2014 的上海。
+    var pendingYear by remember { mutableStateOf<Int?>(null) }
+    var pendingAll by remember { mutableStateOf(false) }
+
+    LaunchedEffect(focusYear, pendingYear, pendingAll) {
+        val ready = if (pendingAll) focusYear == null else pendingYear != null && focusYear == pendingYear
+        if (!ready) return@LaunchedEffect
+        pendingYear = null
+        pendingAll = false
+        // 再等一帧，确保画布收到的 tourSpots 已经是新年份的那一份
+        withFrameNanos { }
+        tourRunId++
+        tourPlaying = true
+    }
 
     // 播放序列：焦点年份按时间正序；未选年份时播放全部（全体）
     val tourSpots = remember(spots, focusYear) {
