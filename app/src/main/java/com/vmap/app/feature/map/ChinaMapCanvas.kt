@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
@@ -717,12 +718,12 @@ fun ChinaMapCanvas(
                 spotVirtual(tourSpots[i]).y,
             )
 
-            // 1) 已走过的段：0..tourLitCount-1 之间的相邻段画成实抛物线
+            // 1) 已走过的段：0..tourLitCount-1 之间的相邻段画成淡抛物线（历史轨迹，不抢当前飞行段的亮度）
             if (tourLitCount >= 2) {
                 for (i in 0 until (tourLitCount - 1).coerceAtMost(tourN - 1)) {
                     val a = screenPos(i)
                     val b = screenPos(i + 1)
-                    drawTourArc(a, b, accent, alpha = 0.85f)
+                    drawTourArc(a, b, accent, alpha = 0.40f)
                 }
             }
 
@@ -750,62 +751,51 @@ fun ChinaMapCanvas(
                         val p1 = quadPoint(a, ctrl, b, t1)
                         drawLine(accent.copy(alpha = 0.9f), p0, p1, strokeWidth = 3.5f, cap = StrokeCap.Round)
                     }
-                    // 飞行光点（箭头头部）带拖尾
+                    // 飞行光点：线上唯一的一个白芯光点（就是"3D立体箭头"，不是单独的箭头，也不带拖尾）
                     val pos = quadPoint(a, ctrl, b, phase.t)
-                    for (k in 1..3) {
-                        val tt = (phase.t - k * 0.05f).coerceIn(0f, 1f)
-                        val tail = quadPoint(a, ctrl, b, tt)
-                        val fade = (1f - k * 0.28f).coerceAtLeast(0f)
-                        drawCircle(accent.copy(alpha = 0.5f * fade), radius = 5f * (1f - k * 0.22f), center = tail)
-                    }
-                    drawCircle(accent.copy(alpha = 0.3f), radius = 12f, center = pos)
-                    drawCircle(Color.White.copy(alpha = 0.95f), radius = 4.5f, center = pos)
+                    drawCircle(accent.copy(alpha = 0.32f), radius = 11f, center = pos)
+                    drawCircle(Color.White.copy(alpha = 0.98f), radius = 4.5f, center = pos)
                 }
             }
 
-            // 3) Burst：粒子从城市中心向外扩散，逐渐填满城市
+            // 3) Burst：蒙版式扩散——以城市地块路径为蒙版，点亮色从质心向外铺满整块城市
             if (phase is TourPhase.Burst) {
                 val spot = tourSpots[phase.index]
-                val c = toScreen(spotVirtual(spot).x, spotVirtual(spot).y)
                 val province = provinces.firstOrNull { it.adcode == spot.adcode }
-                val radius = if (province != null) {
-                    // 用城市 bbox 的覆盖半径，让粒子扩散到「填满城市」
-                    val tl = toScreen(province.bounds.left, province.bounds.top)
-                    val br = toScreen(province.bounds.right, province.bounds.bottom)
-                    maxOf((br.x - tl.x), (br.y - tl.y)) / 2f
-                } else {
-                    40f
-                }
-                val r = (radius * phase.t).coerceAtLeast(1f)
-                // 粒子扩散环 + 填充
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        0f to accent.copy(alpha = 0.9f),
-                        0.7f to accent.copy(alpha = 0.45f),
-                        1f to Color.Transparent,
-                        center = c,
-                        radius = r,
-                    ),
-                    radius = r,
-                    center = c,
-                )
-                // 扩散前沿的高亮环
-                drawCircle(
-                    accent.copy(alpha = 0.8f * (1f - phase.t * 0.4f)),
-                    radius = (r * 0.9f).coerceAtLeast(2f),
-                    center = c,
-                    style = Stroke(width = 2.5f),
-                )
-                // 散落的粒子点
-                val particles = 14
-                for (i in 0 until particles) {
-                    val ang = (i.toFloat() / particles) * 2f * Math.PI.toFloat() + phase.t * 0.6f
-                    val pr = r * (0.25f + 0.75f * ((i * 37 % 100) / 100f))
-                    drawCircle(
-                        accent.copy(alpha = 0.7f),
-                        radius = 1.8f,
-                        center = Offset(c.x + kotlin.math.cos(ang) * pr, c.y + kotlin.math.sin(ang) * pr),
-                    )
+                if (province != null) {
+                    // 城市质心用虚拟坐标，与 province.path 同系
+                    val vc = spotVirtual(spot)
+                    val halfW = (province.bounds.right - province.bounds.left) / 2f
+                    val halfH = (province.bounds.bottom - province.bounds.top) / 2f
+                    val coverR = hypot(halfW, halfH)
+                    val r = (coverR * phase.t).coerceAtLeast(1f)
+                    val fill = litFill(cityAccent(spot.adcode))
+                    withTransform({
+                        translate(dx, dy)
+                        scale(k, k, pivot = Offset.Zero)
+                    }) {
+                        // 用城市路径裁剪，扩散圆只在城市范围内显形：颜色从中心一圈圈铺满整块地块
+                        clipPath(province.path) {
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    0f to fill,
+                                    0.85f to fill,
+                                    1f to fill.copy(alpha = 0.92f),
+                                    center = vc,
+                                    radius = r,
+                                ),
+                                radius = r,
+                                center = vc,
+                            )
+                            // 扩散前沿的高亮环，标出正在覆盖的边界
+                            drawCircle(
+                                accent.copy(alpha = 0.85f * (1f - phase.t * 0.4f)),
+                                radius = (r * 0.98f).coerceAtLeast(1f),
+                                center = vc,
+                                style = Stroke(width = 2.2f / k),
+                            )
+                        }
+                    }
                 }
             }
 
