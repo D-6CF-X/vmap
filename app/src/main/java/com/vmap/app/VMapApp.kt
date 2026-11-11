@@ -24,6 +24,9 @@ class VMapApp : Application() {
  */
 class AppContainer(context: Context) {
 
+    /** 交给需要读 assets / SharedPreferences 的地方（自动导入用）。 */
+    val appContext: Context = context
+
     private val database: VMapDatabase = VMapDatabase.build(context)
 
     val spotRepository: SpotRepository =

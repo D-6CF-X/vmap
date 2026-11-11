@@ -21,7 +21,7 @@ import com.vmap.app.domain.model.Tag
 
 @Database(
     entities = [Spot::class, Photo::class, Tag::class, SpotTag::class, SongRating::class, Song::class],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -72,9 +72,20 @@ abstract class VMapDatabase : RoomDatabase() {
             }
         }
 
+        /** v5 → v6：歌曲加演唱会场次信息（板块 / 系列 / 年份 / 出场次数 / 专辑），只加列。 */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `songs` ADD COLUMN `series` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `songs` ADD COLUMN `tour` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `songs` ADD COLUMN `years` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `songs` ADD COLUMN `perfCount` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `songs` ADD COLUMN `album` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun build(context: Context): VMapDatabase =
             Room.databaseBuilder(context, VMapDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 // 兜底：将来再加表时如果忘了写 Migration，宁可清库也别崩
                 .fallbackToDestructiveMigration()
                 .build()

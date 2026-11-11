@@ -34,4 +34,14 @@ data class Song(
     val externalId: String = "",
     /** 曲绘 / 封面的相对路径（相对 filesDir），空表示还没上图。 */
     val coverPath: String = "",
+    /** 所属板块：TIANYI / MIKU，空表示手动添加、不属于任何演唱会。 */
+    val series: String = "",
+    /** 演唱会系列名，可能有好几个（同一首歌唱过好几轮），逗号分隔。手动添加的为空。 */
+    val tour: String = "",
+    /** 出场年份，逗号分隔（一首歌可能跨好几年都在唱），用于按年份筛选。 */
+    val years: String = "",
+    /** 在历次演唱会上唱过几次，作为鉴赏排行的初始依据。 */
+    val perfCount: Int = 0,
+    /** 专辑名（网易云曲库给的信息）。 */
+    val album: String = "",
 )

@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 5,
-    "identityHash": "b120c320cd4dde11eb98b0d9c2745d31",
+    "identityHash": "f40fc0ea8c94f31715f7a50ab7aaa995",
     "entities": [
       {
         "tableName": "spots",
@@ -291,7 +291,7 @@
       },
       {
         "tableName": "songs",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `artist` TEXT NOT NULL, `plays` INTEGER NOT NULL, `ratingId` TEXT NOT NULL, `orderIndex` INTEGER NOT NULL, `source` TEXT NOT NULL, `externalId` TEXT NOT NULL, `coverPath` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `artist` TEXT NOT NULL, `plays` INTEGER NOT NULL, `ratingId` TEXT NOT NULL, `orderIndex` INTEGER NOT NULL, `source` TEXT NOT NULL, `externalId` TEXT NOT NULL, `coverPath` TEXT NOT NULL, `series` TEXT NOT NULL, `tour` TEXT NOT NULL, `years` TEXT NOT NULL, `perfCount` INTEGER NOT NULL, `album` TEXT NOT NULL, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -346,6 +346,36 @@
             "columnName": "coverPath",
             "affinity": "TEXT",
             "notNull": true
+          },
+          {
+            "fieldPath": "series",
+            "columnName": "series",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tour",
+            "columnName": "tour",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "years",
+            "columnName": "years",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "perfCount",
+            "columnName": "perfCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "album",
+            "columnName": "album",
+            "affinity": "TEXT",
+            "notNull": true
           }
         ],
         "primaryKey": {
@@ -361,7 +391,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'b120c320cd4dde11eb98b0d9c2745d31')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f40fc0ea8c94f31715f7a50ab7aaa995')"
     ]
   }
 }

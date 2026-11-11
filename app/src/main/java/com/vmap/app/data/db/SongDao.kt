@@ -46,4 +46,10 @@ interface SongDao {
 
     @Query("SELECT * FROM songs WHERE ratingId = :ratingId ORDER BY orderIndex ASC")
     suspend fun songsOf(ratingId: String): List<Song>
+
+    @Query("SELECT COUNT(*) FROM songs")
+    suspend fun songCount(): Int
+
+    @Query("SELECT externalId FROM songs WHERE externalId != ''")
+    suspend fun allExternalIds(): List<String>
 }

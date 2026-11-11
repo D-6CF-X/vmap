@@ -45,8 +45,28 @@ class CoverStore(private val context: Context) {
         }
     }
 
-    suspend fun load(relativePath: String): ImageBitmap? = withContext(Dispatchers.IO) {
-        if (relativePath.isBlank()) return@withContext null
+    /**
+     * 把内置 assets 里的曲绘复制成正式的封面文件（首次导入巡演曲目时用）。
+     * 复制的目的只有一个：让后面的加载路径和用户手动选的图完全一致。
+     */
+    suspend fun importAsset(assetPath: String, songId: String): String? = withContext(Dispatchers.IO) {
+        if (assetPath.isBlank()) return@withContext null
+        val relative = "covers/$songId.jpg"
+        val target = absoluteFile(relative)
+        if (target.exists() && target.length() > 0) return@withContext relative
+        runCatching {
+            target.parentFile?.mkdirs()
+            context.assets.open(assetPath).use { input ->
+                target.outputStream().use { out -> input.copyTo(out) }
+            }
+            relative
+        }.getOrElse {
+            Log.e(TAG, "内置曲绘导入失败 asset=$assetPath", it)
+            null
+        }
+    }
+
+    suspend fun load(relativePath: String): ImageBitmap? = withContext(Dispatchers.IO) {        if (relativePath.isBlank()) return@withContext null
         val file = absoluteFile(relativePath)
         if (!file.exists()) return@withContext null
         runCatching {

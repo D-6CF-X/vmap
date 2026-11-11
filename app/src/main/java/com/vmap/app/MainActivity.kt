@@ -137,7 +137,7 @@ private enum class Page(val label: String, val icon: ImageVector) {
     ARCHIVE("往音簿", Icons.Filled.LibraryMusic),
     ACHIEVEMENT("成就", Icons.Filled.EmojiEvents),
     REVIEW("年度回顾", Icons.Filled.CalendarMonth),
-    SONGS("歌单排行", Icons.Filled.QueueMusic),
+    SONGS("歌曲鉴赏", Icons.Filled.QueueMusic),
 }
 
 @Composable
@@ -153,7 +153,13 @@ private fun VMapRoot() {
 
     val songViewModel: SongBoardViewModel = viewModel(
         factory = viewModelFactory {
-            initializer { SongBoardViewModel(app.container.songDao, app.container.coverStore) }
+            initializer {
+                SongBoardViewModel(
+                    app.container.songDao,
+                    app.container.coverStore,
+                    app.container.appContext,
+                )
+            }
         },
     )
 

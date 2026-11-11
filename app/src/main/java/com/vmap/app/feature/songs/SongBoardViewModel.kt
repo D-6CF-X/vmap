@@ -10,6 +10,7 @@ import com.vmap.app.domain.model.Song
 import com.vmap.app.domain.model.SongRating
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -25,6 +26,7 @@ data class ImportResult(val added: Int, val skipped: Int)
 class SongBoardViewModel(
     private val dao: SongDao,
     private val coverStore: CoverStore,
+    private val context: android.content.Context,
 ) : ViewModel() {
 
     val ratings: StateFlow<List<SongRating>> = dao.observeRatings()
@@ -34,7 +36,10 @@ class SongBoardViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     init {
-        viewModelScope.launch { ensureDefaults() }
+        viewModelScope.launch {
+            ensureDefaults()
+            seedArchive()
+        }
     }
 
     /** 首次进入给一套默认档位，用户可以直接用，也可以全删了重建。 */
@@ -48,6 +53,71 @@ class SongBoardViewModel(
                 SongRating(name = "C", color = 0xFF8E9BAA, orderIndex = 3),
             ),
         )
+    }
+
+    /**
+     * 首次进入曲库：把内置的历年演唱会曲目（网易云曲库口径）灌进来。
+     *
+     * 只跑一次（SharedPreferences 打标记），已经导入过的歌按 externalId 跳过，
+     * 所以用户手动加的歌不会被动，重复启动也不会重复插。
+     * 初始档位按「在历次演唱会上唱过几次」分：唱得越多档位越高，之后可以自己拖。
+     */
+    private suspend fun seedArchive() {
+        val prefs = context.getSharedPreferences("vmap_seed", android.content.Context.MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_SEEDED, false)) return
+
+        val archive = com.vmap.app.data.song.SongArchive.load(context)
+        if (archive.isEmpty()) {
+            prefs.edit().putBoolean(KEY_SEEDED, true).apply()
+            return
+        }
+
+        val existing = dao.allExternalIds().toHashSet()
+        val incoming = archive.filter { it.id !in existing }.sortedByDescending { it.perfCount }
+        if (incoming.isEmpty()) {
+            prefs.edit().putBoolean(KEY_SEEDED, true).apply()
+            return
+        }
+
+        val ratings = dao.observeRatings().first().sortedBy { it.orderIndex }
+        if (ratings.isEmpty()) return
+        // 出场次数 → 初始档位：唱过 6 场以上的进 S，3 场以上 A，2 场以上 B，其余 C
+        fun tierOf(perf: Int): SongRating = when {
+            perf >= 6 -> ratings[0]
+            perf >= 3 -> ratings.getOrNull(1) ?: ratings[0]
+            perf >= 2 -> ratings.getOrNull(2) ?: ratings.last()
+            else -> ratings.last()
+        }
+
+        val perTierCount = HashMap<String, Int>()
+        val rows = ArrayList<Song>(incoming.size)
+        incoming.forEach { a ->
+            val tier = tierOf(a.perfCount)
+            val idx = perTierCount[tier.id] ?: 0
+            perTierCount[tier.id] = idx + 1
+            val songId = "arc-${a.id}"
+            val cover = coverStore.importAsset(a.coverAsset, songId).orEmpty()
+            rows.add(
+                Song(
+                    id = songId,
+                    title = a.title,
+                    artist = a.artist,
+                    plays = 0,
+                    ratingId = tier.id,
+                    orderIndex = idx,
+                    source = "netease",
+                    externalId = a.id,
+                    coverPath = cover,
+                    series = a.series,
+                    tour = a.tour,
+                    years = a.years,
+                    perfCount = a.perfCount,
+                    album = a.album,
+                ),
+            )
+        }
+        dao.upsertSongs(rows)
+        prefs.edit().putBoolean(KEY_SEEDED, true).apply()
     }
 
     fun addRating(name: String, color: Long) {
@@ -196,6 +266,10 @@ class SongBoardViewModel(
     }
 
     private fun key(title: String, artist: String) = "${title.trim()}|${artist.trim()}".lowercase()
+
+    private companion object {
+        const val KEY_SEEDED = "songs_seeded_v1"
+    }
 
     private fun parseLine(raw: String): Triple<String, String, Int>? {
         val line = raw.trim()

@@ -58,10 +58,12 @@ import com.vmap.app.domain.model.SongRating
 import java.io.File
 
 /**
- * 曲绘排行：海报墙式的图片排行。
+ * 歌曲鉴赏：海报墙式的曲目排行。
  *
+ * 曲目与曲绘来自网易云音乐的历年演唱会歌单（首次进入自动导入），
+ * 顶部可以按板块 / 年份 / 演唱会系列筛，筛完就是「某年某轮巡演」的排行。
  * 每个评级一组横向滚动的大幅曲绘卡（3:4 竖版），曲绘是绝对主体，
- * 歌名 / 歌手 / 播放次数用渐变暗角压在图上，评级用左上角色块角标表示。
+ * 歌名 / 歌手 / 登场次数用渐变暗角压在图上，评级用左上角色块角标表示。
  * 长按曲绘拖动换位、换组，松手落库。没有曲绘的歌用应援色渐变 + 首字兜底。
  */
 @Composable
@@ -71,12 +73,44 @@ fun SongBoardScreen(
     accent: Color,
 ) {
     val ratings by viewModel.ratings.collectAsStateWithLifecycle()
-    val songs by viewModel.songs.collectAsStateWithLifecycle()
+    val allSongs by viewModel.songs.collectAsStateWithLifecycle()
+
+    // 筛选：板块 / 年份 / 演唱会系列。三者都能单独用，组合起来就是「某年某轮巡演」的排行。
+    var seriesFilter by remember { mutableStateOf("") }
+    var yearFilter by remember { mutableStateOf(0) }
+    var tourFilter by remember { mutableStateOf("") }
+
+    val years = remember(allSongs) {
+        allSongs.asSequence()
+            .flatMap { it.years.split(',').asSequence() }
+            .mapNotNull { it.trim().toIntOrNull() }
+            .distinct()
+            .sorted()
+            .toList()
+    }
+    val tours = remember(allSongs) {
+        allSongs.asSequence()
+            .flatMap { it.tour.split(',').asSequence() }
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sorted()
+            .toList()
+    }
+    val songs = remember(allSongs, seriesFilter, yearFilter, tourFilter) {
+        allSongs.filter { s ->
+            (seriesFilter.isBlank() || s.series == seriesFilter) &&
+                (yearFilter == 0 || s.years.split(',').any { it.trim() == yearFilter.toString() }) &&
+                (tourFilter.isBlank() || s.tour.split(',').any { it.trim() == tourFilter })
+        }
+    }
+    val filtering = seriesFilter.isNotBlank() || yearFilter != 0 || tourFilter.isNotBlank()
 
     // 按评级分组，组内按手动顺序；再按评级的 orderIndex 排序（S 在上）
     val grouped = remember(ratings, songs) {
         ratings.sortedBy { it.orderIndex }
             .map { r -> r to songs.filter { it.ratingId == r.id }.sortedBy { it.orderIndex } }
+            .filter { (_, list) -> list.isNotEmpty() || !filtering }
     }
     // 未归属任何评级（理论上不该出现）的歌也兜住
     val ratingIds = ratings.map { it.id }.toSet()
@@ -125,14 +159,63 @@ fun SongBoardScreen(
         ) {
             item(key = "header", span = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan.FullLine) {
                 Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    GradientTitle(text = "曲绘排行", accent = accent, fontSize = 24.sp)
+                    GradientTitle(text = "歌曲鉴赏", accent = accent, fontSize = 24.sp)
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        text = "${songs.size} 首 · ${ratings.size} 档 · 长按曲绘拖动排序",
+                        text = if (filtering) {
+                            "${songs.size} / ${allSongs.size} 首 · 按演唱会登场次数归档"
+                        } else {
+                            "${allSongs.size} 首 · 曲目与曲绘来自网易云音乐 · 长按曲绘拖动排序"
+                        },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 11.sp,
                     )
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(10.dp))
+
+                    // 板块：天依 / 初音 / 全部
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip("全部板块", seriesFilter.isBlank(), accent, isDark) { seriesFilter = "" }
+                        FilterChip("依你随行", seriesFilter == "TIANYI", accent, isDark) { seriesFilter = "TIANYI" }
+                        FilterChip("因音而遇", seriesFilter == "MIKU", accent, isDark) { seriesFilter = "MIKU" }
+                    }
+                    Spacer(Modifier.height(6.dp))
+
+                    // 年份
+                    androidx.compose.foundation.lazy.LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        item(key = "year-all") {
+                            FilterChip("全部年份", yearFilter == 0, accent, isDark) { yearFilter = 0 }
+                        }
+                        years.forEach { y ->
+                            item(key = "year-$y") {
+                                FilterChip("$y", yearFilter == y, accent, isDark) {
+                                    yearFilter = if (yearFilter == y) 0 else y
+                                }
+                            }
+                        }
+                    }
+
+                    // 演唱会系列
+                    if (tours.size > 1) {
+                        Spacer(Modifier.height(6.dp))
+                        androidx.compose.foundation.lazy.LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            item(key = "tour-all") {
+                                FilterChip("全部系列", tourFilter.isBlank(), accent, isDark) { tourFilter = "" }
+                            }
+                            tours.forEach { t ->
+                                item(key = "tour-$t") {
+                                    FilterChip(t, tourFilter == t, accent, isDark) {
+                                        tourFilter = if (tourFilter == t) "" else t
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ToolChip("＋ 歌曲", accent, isDark) { showAdd = true }
                         ToolChip("导入", accent, isDark) { showImport = true }
@@ -147,6 +230,7 @@ fun SongBoardScreen(
                     TierRow(
                         rating = rating,
                         songs = list,
+                        yearFilter = yearFilter,
                         isDark = isDark,
                         draggingId = dragging?.id,
                         dragDelta = dragDelta,
@@ -175,6 +259,7 @@ fun SongBoardScreen(
                     TierRow(
                         rating = SongRating(name = "未分组", color = 0xFF8E9BAA, orderIndex = Int.MAX_VALUE),
                         songs = unrated,
+                        yearFilter = yearFilter,
                         isDark = isDark,
                         draggingId = dragging?.id,
                         dragDelta = dragDelta,
@@ -272,6 +357,7 @@ fun SongBoardScreen(
 private fun TierRow(
     rating: SongRating,
     songs: List<Song>,
+    yearFilter: Int,
     isDark: Boolean,
     draggingId: String?,
     dragDelta: Offset,
@@ -333,6 +419,7 @@ private fun TierRow(
                     SongPosterCard(
                         song = song,
                         rank = songs.indexOf(song) + 1,
+                        yearFilter = yearFilter,
                         ratingColor = color,
                         isDark = isDark,
                         isDragging = draggingId == song.id,
@@ -355,6 +442,7 @@ private fun TierRow(
 private fun SongPosterCard(
     song: Song,
     rank: Int,
+    yearFilter: Int,
     ratingColor: Color,
     isDark: Boolean,
     isDragging: Boolean,
@@ -443,14 +531,34 @@ private fun SongPosterCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                if (song.plays > 0) {
+                val meta = when {
+                    song.perfCount > 0 -> "演唱 ${song.perfCount} 场"
+                    song.plays > 0 -> "▶ ${formatPlays(song.plays)}"
+                    else -> ""
+                }
+                if (meta.isNotBlank()) {
                     Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = "▶ ${formatPlays(song.plays)}",
-                        color = ratingColor.takeIf { isDark } ?: Color.White.copy(alpha = 0.9f),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = meta,
+                            color = ratingColor.takeIf { isDark } ?: Color.White.copy(alpha = 0.9f),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        val yearTag = if (yearFilter != 0) {
+                            yearFilter
+                        } else {
+                            song.years.split(',').mapNotNull { it.trim().toIntOrNull() }.maxOrNull()
+                        }
+                        if (yearTag != null) {
+                            Spacer(Modifier.width(5.dp))
+                            Text(
+                                text = "$yearTag",
+                                color = Color.White.copy(alpha = 0.62f),
+                                fontSize = 9.sp,
+                            )
+                        }
+                    }
                 }
             }
 
@@ -534,10 +642,42 @@ private fun EmptySlot(color: Color) {
     }
 }
 
+/** 筛选用的小胶囊：选中态点亮应援色，未选中只留一圈淡边。 */
+@Composable
+private fun FilterChip(
+    label: String,
+    selected: Boolean,
+    accent: Color,
+    isDark: Boolean,
+    onClick: () -> Unit,
+) {
+    val shape = CircleShape
+    Box(
+        modifier = Modifier
+            .clip(shape)
+            .background(
+                if (selected) accent.copy(alpha = if (isDark) 0.28f else 0.20f) else Color.Transparent,
+            )
+            .border(1.dp, accent.copy(alpha = if (selected) 0.72f else 0.22f), shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    ) {
+        Text(
+            text = label,
+            color = if (selected) {
+                if (isDark) lerp(accent, Color.White, 0.42f) else lerp(accent, Color(0xFF08161E), 0.52f)
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
+            },
+            fontSize = 11.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+        )
+    }
+}
+
 /** 小工具胶囊。 */
 @Composable
-private fun ToolChip(label: String, accent: Color, isDark: Boolean, onClick: () -> Unit) {
-    val shape = CircleShape
+private fun ToolChip(label: String, accent: Color, isDark: Boolean, onClick: () -> Unit) {    val shape = CircleShape
     Box(
         modifier = Modifier
             .clip(shape)

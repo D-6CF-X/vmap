@@ -770,13 +770,17 @@ fun ChinaMapCanvas(
         // 线上活动没有坐标，连线时跳过，避免连到 (0,0)
         val routeStops = activeRoute.filter { it.adcode.isNotBlank() }
         if (showRoute && !isTouring && routeStops.size >= 2) {
-            routeStops.zipWithNext { from, to ->
+            // 先把每一段的几何算出来：画线要用，下面「单个光点巡游整条路线」也要用
+            val segs = ArrayList<RouteSeg>(routeStops.size - 1)
+            for (i in 0 until routeStops.size - 1) {
+                val from = routeStops[i]
+                val to = routeStops[i + 1]
                 val a = toScreen(spotVirtual(from).x, spotVirtual(from).y)
                 val b = toScreen(spotVirtual(to).x, spotVirtual(to).y)
                 val ddx = b.x - a.x
                 val ddy = b.y - a.y
-                val len = hypot(ddx, ddy).takeIf { it > 0f } ?: return@zipWithNext
-
+                val len = hypot(ddx, ddy)
+                if (len <= 0.5f) continue
                 var nx = -ddy / len
                 var ny = ddx / len
                 if (ny > 0) {
@@ -785,37 +789,60 @@ fun ChinaMapCanvas(
                 }
                 val height = len * 0.28f
                 val ctrl = Offset((a.x + b.x) / 2 + nx * height, (a.y + b.y) / 2 + ny * height)
-
                 // 综合模式下每段航线从起点城市的颜色渐变到终点城市的颜色（天依蓝 ↔ 初音绿）
-                val segA = cityColors(from.adcode).first
-                val segB = cityColors(to.adcode).second
+                segs.add(
+                    RouteSeg(a, ctrl, b, cityColors(from.adcode).first, cityColors(to.adcode).second, len),
+                )
+            }
 
-                drawLine(segA.copy(alpha = 0.15f), a, b, strokeWidth = 1.5f, cap = StrokeCap.Round)
-
+            segs.forEach { s ->
+                drawLine(s.c1.copy(alpha = 0.15f), s.a, s.b, strokeWidth = 1.5f, cap = StrokeCap.Round)
                 val segments = 36
                 for (i in 0 until segments) {
                     val t0 = i / segments.toFloat()
                     val t1 = (i + 1) / segments.toFloat()
-                    val p0 = quadPoint(a, ctrl, b, t0)
-                    val p1 = quadPoint(a, ctrl, b, t1)
+                    val p0 = quadPoint(s.a, s.ctrl, s.b, t0)
+                    val p1 = quadPoint(s.a, s.ctrl, s.b, t1)
                     val tm = (t0 + t1) / 2
                     val lift = 1f - kotlin.math.abs(tm - 0.5f) * 2f
                     val width = 0.7f + 4.5f * lift
                     val alpha = 0.30f + 0.70f * lift
-                    drawLine(lerp(segA, segB, tm).copy(alpha = alpha), p0, p1, strokeWidth = width, cap = StrokeCap.Round)
+                    drawLine(lerp(s.c1, s.c2, tm).copy(alpha = alpha), p0, p1, strokeWidth = width, cap = StrokeCap.Round)
                 }
-                val seg = segA
+            }
 
-                val t = flow
-                val pos = quadPoint(a, ctrl, b, t)
-                for (k in 1..3) {
-                    val tt = (t - k * 0.04f).coerceIn(0f, 1f)
-                    val tail = quadPoint(a, ctrl, b, tt)
-                    val fade = (1f - k * 0.25f).coerceAtLeast(0f)
-                    drawCircle(seg.copy(alpha = 0.4f * fade), radius = 4f * (1f - k * 0.2f), center = tail)
+            // 光点只有一个：沿整条路线按航段顺序走过去，不再「每段各一个点一起出发」。
+            // 首尾各留一小段做淡入淡出，循环回到起点时不生硬。
+            val totalLen = segs.sumOf { it.len.toDouble() }.toFloat()
+            if (totalLen > 1f) {
+                val head = flow
+                val alpha = minOf(
+                    (head / 0.07f).coerceIn(0f, 1f),
+                    ((1f - head) / 0.10f).coerceIn(0f, 1f),
+                )
+                if (alpha > 0.01f) {
+                    fun sample(dist: Float): Pair<Offset, Color>? {
+                        var d = dist
+                        for (s in segs) {
+                            if (d <= s.len || s === segs.last()) {
+                                val lt = (d / s.len).coerceIn(0f, 1f)
+                                return quadPoint(s.a, s.ctrl, s.b, lt) to lerp(s.c1, s.c2, lt)
+                            }
+                            d -= s.len
+                        }
+                        return null
+                    }
+                    val d0 = head * totalLen
+                    for (k in 1..3) {
+                        val prev = sample(d0 - k * 15f) ?: continue
+                        val fade = (1f - k * 0.26f).coerceAtLeast(0f)
+                        drawCircle(prev.second.copy(alpha = 0.42f * fade * alpha), radius = 4.4f * fade, center = prev.first)
+                    }
+                    sample(d0)?.let { (pos, col) ->
+                        drawCircle(col.copy(alpha = 0.24f * alpha), radius = 9f, center = pos)
+                        drawCircle(Color.White.copy(alpha = 0.95f * alpha), radius = 3.5f, center = pos)
+                    }
                 }
-                drawCircle(seg.copy(alpha = 0.22f), radius = 9f, center = pos)
-                drawCircle(Color.White.copy(alpha = 0.95f), radius = 3.5f, center = pos)
             }
         }
 
@@ -885,14 +912,21 @@ fun ChinaMapCanvas(
                         )
                     }
                     // 飞行光点：线上唯一的一个白芯光点（就是"3D立体箭头"，不带多余拖尾圆）
+                    // 出发时淡入、到站前淡出，配合「一次只有一个点」——不会和上一程的点同时出现在地图上
                     val pos = flightPoint(a, ctrl, b, phase.t, amp)
+                    val headAlpha = minOf(
+                        (phase.t / 0.12f).coerceIn(0f, 1f),
+                        ((1f - phase.t) / 0.14f).coerceIn(0f, 1f),
+                    )
                     val headColor = lerp(
                         cityColors(flyFrom.adcode).first,
                         cityColors(flyTo.adcode).second,
                         phase.t,
                     )
-                    drawCircle(headColor.copy(alpha = 0.32f), radius = 11f, center = pos)
-                    drawCircle(Color.White.copy(alpha = 0.98f), radius = 4.5f, center = pos)
+                    if (headAlpha > 0.01f) {
+                        drawCircle(headColor.copy(alpha = 0.32f * headAlpha), radius = 11f, center = pos)
+                        drawCircle(Color.White.copy(alpha = 0.98f * headAlpha), radius = 4.5f, center = pos)
+                    }
                 }
             }
 
@@ -1054,6 +1088,16 @@ fun ChinaMapCanvas(
         // 点亮城市不再画圆点：靠地块填色 + 立体城市名表达，点位留给路线端点
     }
 }
+
+/** 一段航线的绘制参数：起点、控制点、终点、两端颜色、长度（屏幕像素）。 */
+private data class RouteSeg(
+    val a: Offset,
+    val ctrl: Offset,
+    val b: Offset,
+    val c1: Color,
+    val c2: Color,
+    val len: Float,
+)
 
 /** 画一条抛物线航段（用于巡演动画里「已走过的段」）。 */
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTourArc(
