@@ -1,7 +1,5 @@
 package com.vmap.app.feature.map
 
-import android.media.AudioManager
-import android.media.ToneGenerator
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -41,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.sp
+import com.vmap.app.core.audio.PianoTone
 import com.vmap.app.core.map.ChinaMapData
 import com.vmap.app.core.ui.accent
 import com.vmap.app.domain.model.Section
@@ -184,6 +183,23 @@ fun ChinaMapCanvas(
         return lerp(accent, own, mixProgress)
     }
 
+    /**
+     * 综合模式下的双色渐变：两个板块都去过的城市，从依你随行的天依蓝渐变到因音而遇的初音绿；
+     * 只有一个板块的城市就用自己的应援色（渐变两端同色，等于纯色）。
+     * 返回 null 表示走单色填充。
+     */
+    fun cityGradient(adcode: String): Pair<Color, Color>? {
+        if (!mixed) return null
+        val secs = citySections[adcode].orEmpty()
+        val c1 = secs.getOrNull(0)?.accent ?: accent
+        val c2 = secs.getOrNull(1)?.accent ?: c1
+        return lerp(c1, accent, 1f - mixProgress) to lerp(c2, accent, 1f - mixProgress)
+    }
+
+    /** 城市的"两端色"：综合模式下就是天依蓝→初音绿，普通模式两端同色。 */
+    fun cityColors(adcode: String): Pair<Color, Color> =
+        cityGradient(adcode) ?: (cityAccent(adcode) to cityAccent(adcode))
+
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var selectedAdcode by remember { mutableStateOf<String?>(null) }
@@ -193,7 +209,11 @@ fun ChinaMapCanvas(
     // 已完成点亮（burst+flash）的城市数；这些城市显示为实色
     var tourLitCount by remember { mutableIntStateOf(0) }
 
-    val tone = remember { ToneGenerator(AudioManager.STREAM_MUSIC, 70) }
+    // 钢琴音源：每点亮一座城弹一个音，逐级升高
+    val piano = remember { PianoTone() }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { piano.release() }
+    }
 
     // 播放动画驱动：用 withFrameNanos 手动推进，每个阶段持续一段时间后切换
     LaunchedEffect(tourPlaying, tourSpots, tourRunId) {
@@ -215,17 +235,8 @@ fun ChinaMapCanvas(
         val rippleMs = 1600L
 
         fun playTone(step: Int) {
-            // 到达高亮闪一下：短促上升音（TONE_PROP_BEEP / DTMF）
-            runCatching {
-                tone.startTone(
-                    when (step % 3) {
-                        0 -> ToneGenerator.TONE_PROP_BEEP
-                        1 -> ToneGenerator.TONE_DTMF_1
-                        else -> ToneGenerator.TONE_DTMF_2
-                    },
-                    120,
-                )
-            }
+            // 钢琴音，逐城上行：第一座城 C4，往后一个个音往上爬
+            runCatching { piano.playStep(step) }
         }
 
         /** 跑一个阶段到结束，[emit] 每帧收到 0..1 的进度。 */
@@ -245,7 +256,10 @@ fun ChinaMapCanvas(
         }
 
         // 逐场推进。线上活动没有城市：不飞、不点亮，只飘一条活动名。
+        // 同一座城第二次出现不再重新扩散点亮，只是光点掠过一下，避免"重复点亮"。
         var lastRealIndex = -1
+        val litCities = HashSet<String>()
+        var toneStep = 0
         for (i in 0 until n) {
             val spot = tourSpots[i]
             if (spot.adcode.isBlank()) {
@@ -257,12 +271,21 @@ fun ChinaMapCanvas(
             if (lastRealIndex >= 0) {
                 runPhase(flyMs) { t -> tourPhase = TourPhase.Fly(lastRealIndex, i, t) }
             }
-            // BURST：蒙版式扩散填满这座城市
-            runPhase(burstMs) { t -> tourPhase = TourPhase.Burst(i, t) }
-            // FLASH：高亮闪一下 + 音效
-            tourLitCount = i + 1
-            playTone(i)
-            runPhase(flashMs) { t -> tourPhase = TourPhase.Flash(i, t) }
+            val repeat = litCities.contains(spot.adcode)
+            if (repeat) {
+                // 去过第二次：光点掠过 + 轻轻一闪，不再整块扩散
+                tourLitCount = i + 1
+                playTone(toneStep++)
+                runPhase(380L) { t -> tourPhase = TourPhase.Flash(i, t) }
+            } else {
+                // BURST：蒙版式扩散填满这座城市
+                runPhase(burstMs) { t -> tourPhase = TourPhase.Burst(i, t) }
+                // FLASH：高亮闪一下 + 音效
+                tourLitCount = i + 1
+                playTone(toneStep++)
+                runPhase(flashMs) { t -> tourPhase = TourPhase.Flash(i, t) }
+                litCities.add(spot.adcode)
+            }
             lastRealIndex = i
         }
 
@@ -439,6 +462,17 @@ fun ChinaMapCanvas(
             val visited = litAdcodesNow.contains(p.adcode)
             val cityColor = if (visited) cityAccent(p.adcode) else palette.unlitCity
             val years = cityYears[p.adcode].orEmpty()
+            // 综合模式下，两板块都去过的城市从蓝渐变到绿（斜向，像一块双色亚克力）
+            val grad = if (visited) cityGradient(p.adcode) else null
+            val gradBrush = if (grad != null && grad.first != grad.second) {
+                Brush.linearGradient(
+                    colors = listOf(litFill(grad.first), litFill(grad.second)),
+                    start = Offset(p.bounds.left, p.bounds.top),
+                    end = Offset(p.bounds.right, p.bounds.bottom),
+                )
+            } else {
+                null
+            }
             withTransform({
                 translate(dx, dy)
                 scale(k, k, pivot = Offset.Zero)
@@ -447,9 +481,19 @@ fun ChinaMapCanvas(
                     !visited -> drawPath(p.path, color = palette.unlitCity)
 
                     // 年份模式：地块用「最近一年」的浓度上色，历史年份的深浅交给城市上方的年份刻度点
-                    yearLayers -> drawPath(
+                    yearLayers && gradBrush == null -> drawPath(
                         p.path,
                         color = yearTint(cityColor, years.lastOrNull()?.let { yearStrength(it) } ?: 1f),
+                    )
+
+                    gradBrush != null -> drawPath(
+                        p.path,
+                        brush = gradBrush,
+                        alpha = if (yearLayers) {
+                            0.52f + 0.48f * (years.lastOrNull()?.let { yearStrength(it) } ?: 1f)
+                        } else {
+                            1f
+                        },
                     )
 
                     else -> drawPath(p.path, color = litFill(cityColor))
@@ -533,25 +577,56 @@ fun ChinaMapCanvas(
             val tw = layout.size.width.toFloat()
             val th = layout.size.height.toFloat()
             val c = toScreen(labelV.x, labelV.y)
-
-            val x: Float
-            val y: Float
-            if (emboss != null) {
-                // 点亮城市名只用质心一个位置：允许轻微溢出地块（小地块也认得出是哪个市），
-                // 但绝不换位置硬塞，撞上别的标注整条不画。
-                x = (c.x - tw / 2f).coerceIn(6f, (size.width - tw - 6f).coerceAtLeast(6f))
-                y = (c.y - th / 2f).coerceIn(6f, (size.height - th - 6f).coerceAtLeast(6f))
-            } else {
-                val tl = toScreen(bbox.left, bbox.top)
-                val br = toScreen(bbox.right, bbox.bottom)
-                if (br.x - tl.x < tw * minRatio || br.y - tl.y < th * 1.8f) return false
-                x = (c.x - tw / 2f).coerceIn(tl.x, (br.x - tw).coerceAtLeast(tl.x))
-                y = (c.y - th / 2f).coerceIn(tl.y, (br.y - th).coerceAtLeast(tl.y))
-            }
             val pad = if (emboss != null) 2f else 7f
-            val rect = Rect(x - pad, y - pad, x + tw + pad, y + th + pad)
-            if (occupied.any { it.overlaps(rect) }) return false
-            occupied.add(rect)
+            val minX = 6f
+            val maxX = (size.width - tw - 6f).coerceAtLeast(6f)
+            val minY = 6f
+            val maxY = (size.height - th - 6f).coerceAtLeast(6f)
+
+            // 点亮城市名是"必须有"的信息：质心撞车时依次试上/下/左/右几个候选位，
+            // 都放不下才放弃。之前的实现只试质心一个位置，上海这种挨着杭州的小地块名字就被整条丢了。
+            val candidates: List<Offset> = if (emboss != null) {
+                listOf(
+                    Offset(0f, 0f),
+                    Offset(0f, -th - 3f),
+                    Offset(0f, th + 3f),
+                    Offset(-tw * 0.55f, 0f),
+                    Offset(tw * 0.55f, 0f),
+                    Offset(0f, -th - 14f),
+                    Offset(0f, th + 14f),
+                    Offset(-tw * 0.95f, -th * 0.6f),
+                    Offset(tw * 0.95f, -th * 0.6f),
+                    Offset(-tw * 0.95f, th * 0.8f),
+                    Offset(tw * 0.95f, th * 0.8f),
+                )
+            } else {
+                listOf(Offset.Zero)
+            }
+
+            var placed: Rect? = null
+            for (off in candidates) {
+                val x: Float
+                val y: Float
+                if (emboss != null) {
+                    x = (c.x + off.x - tw / 2f).coerceIn(minX, maxX)
+                    y = (c.y + off.y - th / 2f).coerceIn(minY, maxY)
+                } else {
+                    val tl = toScreen(bbox.left, bbox.top)
+                    val br = toScreen(bbox.right, bbox.bottom)
+                    if (br.x - tl.x < tw * minRatio || br.y - tl.y < th * 1.8f) return false
+                    x = (c.x - tw / 2f).coerceIn(tl.x, (br.x - tw).coerceAtLeast(tl.x))
+                    y = (c.y - th / 2f).coerceIn(tl.y, (br.y - th).coerceAtLeast(tl.y))
+                }
+                val rect = Rect(x - pad, y - pad, x + tw + pad, y + th + pad)
+                if (occupied.none { it.overlaps(rect) }) {
+                    placed = rect
+                    break
+                }
+            }
+            if (placed == null) return false
+            occupied.add(placed)
+            val x = placed.left + pad
+            val y = placed.top + pad
 
             if (emboss != null) {
                 // 立体招牌字：外发光 → 挤出厚度（向下堆叠）→ 渐变字面 → 顶部高光
@@ -603,18 +678,19 @@ fun ChinaMapCanvas(
         // 学高德：省名和城市名互斥——缩小看省，放大看城。
         // 点亮城市名：夜间是白→应援色的招牌字，日间换成深蓝字面（白字压在浅色地块上会消失），
         // 两套按主题进度插值；综合模式下每座城市用自己板块的颜色。
-        fun embossFor(color: Color): Emboss {
+        fun embossFor(color: Color, color2: Color = color): Emboss {
+            // 综合模式下名字本身也是双色：上半段偏天依蓝、下半段偏初音绿
             val nightFill = listOf(
                 Color(0xFFFBFEFF),
-                lerp(color, Color.White, 0.78f),
-                lerp(color, Color.White, 0.34f),
-                color,
+                lerp(color, Color.White, 0.62f),
+                lerp(color2, Color.White, 0.18f),
+                color2,
             )
             val dayFill = listOf(
-                lerp(color, Color(0xFF08161E), 0.88f),
-                lerp(color, Color(0xFF08161E), 0.62f),
-                lerp(color, Color(0xFF08161E), 0.30f),
-                lerp(color, Color(0xFF08161E), 0.16f),
+                lerp(color, Color(0xFF08161E), 0.82f),
+                lerp(color, Color(0xFF08161E), 0.55f),
+                lerp(color2, Color(0xFF08161E), 0.28f),
+                lerp(color2, Color(0xFF08161E), 0.18f),
             )
             return Emboss(
                 fillColors = nightFill.indices.map { i -> lerp(dayFill[i], nightFill[i], darkProgress) },
@@ -653,7 +729,15 @@ fun ChinaMapCanvas(
                 } else {
                     base
                 }
-                tryPlace(layout, p.label, color, p.bounds, 1f, emboss = embossFor(color))
+                val two = cityGradient(p.adcode)
+                tryPlace(
+                    layout,
+                    p.label,
+                    color,
+                    p.bounds,
+                    1f,
+                    emboss = if (two != null) embossFor(two.first, two.second) else embossFor(color),
+                )
             }
 
         // 城市名：任何时候都要有，只是大小和数量随缩放变化。
@@ -702,10 +786,11 @@ fun ChinaMapCanvas(
                 val height = len * 0.28f
                 val ctrl = Offset((a.x + b.x) / 2 + nx * height, (a.y + b.y) / 2 + ny * height)
 
-                // 综合模式下每条航段用起点城市的板块色，两块板各走各的线
-                val seg = if (mixed) lerp(accent, from.section.accent, mixProgress) else accent
+                // 综合模式下每段航线从起点城市的颜色渐变到终点城市的颜色（天依蓝 ↔ 初音绿）
+                val segA = cityColors(from.adcode).first
+                val segB = cityColors(to.adcode).second
 
-                drawLine(seg.copy(alpha = 0.15f), a, b, strokeWidth = 1.5f, cap = StrokeCap.Round)
+                drawLine(segA.copy(alpha = 0.15f), a, b, strokeWidth = 1.5f, cap = StrokeCap.Round)
 
                 val segments = 36
                 for (i in 0 until segments) {
@@ -717,8 +802,9 @@ fun ChinaMapCanvas(
                     val lift = 1f - kotlin.math.abs(tm - 0.5f) * 2f
                     val width = 0.7f + 4.5f * lift
                     val alpha = 0.30f + 0.70f * lift
-                    drawLine(seg.copy(alpha = alpha), p0, p1, strokeWidth = width, cap = StrokeCap.Round)
+                    drawLine(lerp(segA, segB, tm).copy(alpha = alpha), p0, p1, strokeWidth = width, cap = StrokeCap.Round)
                 }
+                val seg = segA
 
                 val t = flow
                 val pos = quadPoint(a, ctrl, b, t)
@@ -744,7 +830,13 @@ fun ChinaMapCanvas(
             // 1) 已走过的段：只连「已点亮的实体城市」，按时间顺序 1→2、2→3 串起来
             val litReal = tourSpots.take(tourLitCount).filter { it.adcode.isNotBlank() }
             for (i in 0 until litReal.size - 1) {
-                drawTourArc(spotPos(litReal[i]), spotPos(litReal[i + 1]), accent, alpha = 0.40f)
+                drawTourArc(
+                    spotPos(litReal[i]),
+                    spotPos(litReal[i + 1]),
+                    cityColors(litReal[i].adcode).first,
+                    alpha = 0.40f,
+                    color2 = cityColors(litReal[i + 1].adcode).second,
+                )
             }
 
             val phase = tourPhase
@@ -767,8 +859,9 @@ fun ChinaMapCanvas(
                     val height = len * 0.28f
                     val ctrl = Offset((a.x + b.x) / 2 + nx * height, (a.y + b.y) / 2 + ny * height)
                     // 只画已经飞过的一段，并让亮度随「离光点多远」衰减
-                    val segs = 40
+                    val segs = 44
                     val trailSpan = 0.55f
+                    val amp = (len * 0.05f).coerceIn(3f, 30f)
                     for (i in 0 until segs) {
                         val t0 = i / segs.toFloat()
                         val t1 = (i + 1) / segs.toFloat()
@@ -778,17 +871,27 @@ fun ChinaMapCanvas(
                         val near = (1f - behind / trailSpan).coerceIn(0f, 1f)
                         val alpha = 0.42f + 0.55f * near
                         val width = 1.3f + 2.6f * near
+                        val segColor = lerp(
+                            cityColors(flyFrom.adcode).first,
+                            cityColors(flyTo.adcode).second,
+                            (t0 + t1) / 2f,
+                        )
                         drawLine(
-                            accent.copy(alpha = alpha.coerceAtMost(0.97f)),
-                            quadPoint(a, ctrl, b, t0),
-                            quadPoint(a, ctrl, b, t1),
+                            segColor.copy(alpha = alpha.coerceAtMost(0.97f)),
+                            flightPoint(a, ctrl, b, t0, amp),
+                            flightPoint(a, ctrl, b, t1, amp),
                             strokeWidth = width,
                             cap = StrokeCap.Round,
                         )
                     }
                     // 飞行光点：线上唯一的一个白芯光点（就是"3D立体箭头"，不带多余拖尾圆）
-                    val pos = quadPoint(a, ctrl, b, phase.t)
-                    drawCircle(accent.copy(alpha = 0.32f), radius = 11f, center = pos)
+                    val pos = flightPoint(a, ctrl, b, phase.t, amp)
+                    val headColor = lerp(
+                        cityColors(flyFrom.adcode).first,
+                        cityColors(flyTo.adcode).second,
+                        phase.t,
+                    )
+                    drawCircle(headColor.copy(alpha = 0.32f), radius = 11f, center = pos)
                     drawCircle(Color.White.copy(alpha = 0.98f), radius = 4.5f, center = pos)
                 }
             }
@@ -844,8 +947,9 @@ fun ChinaMapCanvas(
                     drawTourArc(
                         spotPos(prevReal),
                         spotPos(arrived),
-                        accent,
+                        cityColors(prevReal.adcode).first,
                         alpha = 0.92f + (0.40f - 0.92f) * t,
+                        color2 = cityColors(arrived.adcode).second,
                     )
                 }
             }
@@ -957,6 +1061,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTourArc(
     b: Offset,
     color: Color,
     alpha: Float,
+    color2: Color = color,
 ) {
     val ddx = b.x - a.x
     val ddy = b.y - a.y
@@ -967,16 +1072,23 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTourArc(
     val height = len * 0.28f
     val ctrl = Offset((a.x + b.x) / 2 + nx * height, (a.y + b.y) / 2 + ny * height)
     val segments = 28
+    val amp = (len * 0.03f).coerceIn(1.5f, 16f)
     for (i in 0 until segments) {
         val t0 = i / segments.toFloat()
         val t1 = (i + 1) / segments.toFloat()
-        val p0 = quadPoint(a, ctrl, b, t0)
-        val p1 = quadPoint(a, ctrl, b, t1)
+        val p0 = flightPoint(a, ctrl, b, t0, amp)
+        val p1 = flightPoint(a, ctrl, b, t1, amp)
         val tm = (t0 + t1) / 2
         val lift = 1f - kotlin.math.abs(tm - 0.5f) * 2f
         val width = 0.7f + 3.5f * lift
         val segAlpha = (0.30f + 0.70f * lift) * alpha
-        drawLine(color.copy(alpha = segAlpha), p0, p1, strokeWidth = width, cap = StrokeCap.Round)
+        drawLine(
+            lerp(color, color2, tm).copy(alpha = segAlpha),
+            p0,
+            p1,
+            strokeWidth = width,
+            cap = StrokeCap.Round,
+        )
     }
 }
 
@@ -1031,6 +1143,25 @@ private fun shortCityName(raw: String): String {
         if (i >= 1) n = n.substring(0, i)
     }
     return n.ifBlank { raw }
+}
+
+/**
+ * 抛物线 + 不规则飘移：两条不同频率的正弦叠在一起，相位由端点坐标决定，
+ * 所以每段航线摆动都不一样；两端用 sin(πt) 收敛回城市，不会飞到城外面。
+ */
+private fun flightPoint(a: Offset, ctrl: Offset, b: Offset, t: Float, amp: Float): Offset {
+    val p = quadPoint(a, ctrl, b, t)
+    val dx = b.x - a.x
+    val dy = b.y - a.y
+    val len = kotlin.math.hypot(dx, dy)
+    if (len < 0.001f) return p
+    val nx = -dy / len
+    val ny = dx / len
+    val seed = a.x * 0.013f + b.y * 0.017f
+    val w = kotlin.math.sin(t * 5.9f + seed) * 0.68f +
+        kotlin.math.sin(t * 11.7f + seed * 2.1f) * 0.32f
+    val off = w * amp * kotlin.math.sin(Math.PI.toFloat() * t)
+    return Offset(p.x + nx * off, p.y + ny * off)
 }
 
 /** 二次贝塞尔曲线上的点。 */

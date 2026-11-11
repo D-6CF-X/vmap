@@ -30,6 +30,9 @@ class ProvinceShape(
 /**
  * 中国地级市边界，来自阿里 DataV（简化到 3 位小数，370 城约 2.4MB）。
  * 纯 Canvas 绘制，无地图 SDK 依赖。加载一次缓存复用。
+ *
+ * 投影用 Web Mercator（和高德/百度一致的墨卡托），不能用等经纬度：
+ * 等经纬度会把中国横向拉宽 20~30%，形状看着就是"对不上"。
  */
 object ChinaMapData {
 
@@ -38,13 +41,25 @@ object ChinaMapData {
     private const val LAT_MAX = 54.0
     private const val LAT_MIN = 18.0
     const val VW = 1000f
-    const val VH = 580f
+
+    /** 高度按墨卡托比例算：经度跨度 63° ↔ 纬度 merc(54)-merc(18)，宽高比 1.367。 */
+    const val VH = 732f
+
+    /** Web Mercator 的 y：ln(tan(π/4 + φ/2))。 */
+    private fun mercY(lat: Double): Double {
+        val rad = Math.toRadians(lat)
+        return kotlin.math.ln(kotlin.math.tan(Math.PI / 4 + rad / 2))
+    }
+
+    private val mercTop = mercY(LAT_MAX)
+    private val mercBottom = mercY(LAT_MIN)
+    private val mercSpan = mercTop - mercBottom
 
     fun lngToX(lng: Double): Float =
         ((lng - LNG_MIN) / (LNG_MAX - LNG_MIN) * VW).toFloat()
 
     fun latToY(lat: Double): Float =
-        ((LAT_MAX - lat) / (LAT_MAX - LAT_MIN) * VH).toFloat()
+        ((mercTop - mercY(lat)) / mercSpan * VH).toFloat()
 
     @Volatile
     private var cached: List<ProvinceShape>? = null
