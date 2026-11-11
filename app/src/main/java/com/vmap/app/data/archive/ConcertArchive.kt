@@ -26,6 +26,8 @@ data class ArchiveEvent(
     val note: String,
     val detail: String = "",
     val videoUrl: String = "",
+    /** 纯线上演出：没有实体城市，地图上不点亮地块，巡演时只飘一条活动名。 */
+    val online: Boolean = false,
 ) {
     /** 把 "2017.06.17" / "2019.11" 这类标签转成时间戳，缺日按 1 号、缺月按 1 月。 */
     val performedAt: Long
@@ -40,12 +42,18 @@ data class ArchiveEvent(
             }.timeInMillis
         }
 
-    /** 转成一条本人的打卡记录（坐标 WGS84 → GCJ02）。 */
+    /** 转成一条打卡记录（坐标 WGS84 → GCJ02）。id 固定为 arc-前缀，重复导入不会产生重复足迹。 */
     fun toSpot(): Spot {
-        val gcj = GeoPoint(lat, lng, Srid.WGS84).asGcj02()
+        val gcj = if (online || adcode.isBlank()) {
+            GeoPoint(0.0, 0.0, Srid.WGS84)
+        } else {
+            GeoPoint(lat, lng, Srid.WGS84).asGcj02()
+        }
         return Spot(
+            id = "arc-$id",
             section = section,
-            adcode = adcode,
+            // 线上活动没有城市：adcode 置空，地图不会点亮任何地块
+            adcode = if (online) "" else adcode,
             cityName = city,
             provinceName = "",
             lat = gcj.lat,
@@ -98,6 +106,7 @@ object ConcertArchive {
                         note = o.optString("note"),
                         detail = o.optString("detail"),
                         videoUrl = o.optString("videoUrl"),
+                        online = o.optBoolean("online", false) || o.optString("city") == "线上",
                     )
                 }.sortedByDescending { it.performedAt }
             }.getOrDefault(emptyList())

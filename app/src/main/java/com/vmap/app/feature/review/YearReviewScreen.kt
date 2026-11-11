@@ -83,8 +83,9 @@ fun YearReviewScreen(viewModel: MapViewModel, isDark: Boolean = true) {
             return@Column
         }
 
-        val sorted = thisYear.sortedBy { it.performedAt }
-        val cityCount = thisYear.map { it.adcode }.distinct().size
+        // 线上活动没有坐标，城市数/里程都不算它
+        val sorted = thisYear.filter { it.adcode.isNotBlank() }.sortedBy { it.performedAt }
+        val cityCount = sorted.map { it.adcode }.distinct().size
         val provinceCount = thisYear.map { it.provinceName }.distinct().size
         val distanceKm = sorted.zipWithNext().sumOf { (a, b) -> distanceKm(a, b) }
 

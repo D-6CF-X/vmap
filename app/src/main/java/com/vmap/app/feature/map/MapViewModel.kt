@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MapViewModel(
@@ -73,11 +74,11 @@ class MapViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** 统计从 spots 聚合，筛选后自然跟随。 */
+    /** 统计从 spots 聚合，筛选后自然跟随。线上活动没有城市，不计入城市数。 */
     val stats: StateFlow<SectionStats> = spots
         .map { list ->
             SectionStats(
-                cityCount = list.map { it.adcode }.distinct().size,
+                cityCount = list.map { it.adcode }.filter { it.isNotBlank() }.distinct().size,
                 spotCount = list.size,
             )
         }
@@ -128,6 +129,12 @@ class MapViewModel(
         if (_focusYear.value != null) _yearLayers.value = true
     }
 
+    /** 直接聚焦某一年（点年份时用，不toggle，重复点同一年也会重播动画）。 */
+    fun selectYear(year: Int?) {
+        _focusYear.value = year
+        if (year != null) _yearLayers.value = true
+    }
+
     suspend fun delete(spotId: String) {
         repository.softDelete(spotId)
     }
@@ -135,5 +142,24 @@ class MapViewModel(
     /** 档案页「记入足迹」用。 */
     suspend fun save(spot: Spot) {
         repository.save(spot)
+    }
+
+    /**
+     * 历年演出档案自动导入：首次启动时把档案里每一场演出写进打卡记录，
+     * 地图上每年的演出路径就直接有了，不需要逐条手动添加。
+     * 用 id 前缀 arc- 保证幂等，只导入一次。
+     */
+    fun autoImportArchive(context: android.content.Context) {
+        val prefs = context.getSharedPreferences("vmap_seed", android.content.Context.MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_ARCHIVE_SEEDED, false)) return
+        viewModelScope.launch {
+            val events = com.vmap.app.data.archive.ConcertArchive.load(context)
+            events.forEach { repository.saveIfAbsent(it.toSpot()) }
+            prefs.edit().putBoolean(KEY_ARCHIVE_SEEDED, true).apply()
+        }
+    }
+
+    private companion object {
+        const val KEY_ARCHIVE_SEEDED = "archive_seeded_v1"
     }
 }

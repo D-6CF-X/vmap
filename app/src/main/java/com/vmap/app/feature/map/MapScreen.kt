@@ -80,8 +80,10 @@ fun MapScreen(
 
     var detailSpot by remember { mutableStateOf<Spot?>(null) }
 
-    // 巡演点亮动画：focusYear 选中某年时，点「播放」触发按时间顺序逐城点亮（含飞行/粒子/波纹）
+    // 巡演点亮动画：点某个年份 / 全体就直接播放，不需要再按播放键
     var tourPlaying by remember { mutableStateOf(false) }
+    // 每次点年份递增，用来重启动画（点同一年也能重播）
+    var tourRunId by remember { mutableIntStateOf(0) }
 
     // 播放序列：焦点年份按时间正序；未选年份时播放全部（全体）
     val tourSpots = remember(spots, focusYear) {
@@ -126,6 +128,7 @@ fun MapScreen(
             focusYear = focusYear,
             tourSpots = tourSpots,
             tourPlaying = tourPlaying,
+            tourRunId = tourRunId,
             onTourEnd = { tourPlaying = false },
         )
 
@@ -149,16 +152,18 @@ fun MapScreen(
                 yearLayers = yearLayers,
             )
 
-            // 年份图例：每个去过的年份一个色点，越早越淡；点一下只看那一年，可播放逐一点亮
+            // 年份图例：每个去过的年份一个色点，越早越淡；点一下只看那一年并自动播放点亮动画
             if (yearLayers && spots.isNotEmpty()) {
                 YearLegendBar(
                     spots = spots,
                     accent = accent,
                     isDark = isDark,
                     focusYear = focusYear,
-                    playing = tourPlaying,
-                    onSelect = viewModel::setFocusYear,
-                    onPlay = { tourPlaying = true },
+                    onSelect = { year ->
+                        viewModel.selectYear(year)
+                        tourRunId++
+                        tourPlaying = true
+                    },
                 )
             }
 
@@ -212,7 +217,9 @@ private fun SectionSwitchBar(
     // 三种视角：城市/场次 → 累计里程 → 最常去
     var statPage by remember { mutableIntStateOf(0) }
     val totalKm = remember(route) {
-        route.zipWithNext().sumOf { (a, b) -> distanceKm(a.lat, a.lng, b.lat, b.lng) }
+        // 线上活动没有坐标，不参与里程计算
+        val stops = route.filter { it.adcode.isNotBlank() }
+        stops.zipWithNext().sumOf { (a, b) -> distanceKm(a.lat, a.lng, b.lat, b.lng) }
     }
     val topCity = remember(spots) { spots.groupBy { it.cityName }.maxByOrNull { it.value.size } }
 
@@ -372,9 +379,7 @@ private fun YearLegendBar(
     accent: Color,
     isDark: Boolean,
     focusYear: Int?,
-    playing: Boolean,
     onSelect: (Int?) -> Unit,
-    onPlay: () -> Unit,
 ) {
     val years = remember(spots) { spots.map { yearOf(it.performedAt) }.distinct().sorted() }
     if (years.isEmpty()) return
@@ -472,24 +477,14 @@ private fun YearLegendBar(
                     )
                 }
             }
-            // 播放按钮：始终显示，点对应年份/全体后播放逐城点亮动画
+            // 提示：点年份即自动播放，不再单独放播放键
             item {
-                Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(accent.copy(alpha = 0.22f))
-                        .border(1.dp, accent.copy(alpha = 0.55f), CircleShape)
-                        .clickable(enabled = !playing, onClick = onPlay)
-                        .padding(horizontal = 12.dp, vertical = 5.dp),
-                ) {
-                    Text(
-                        text = if (playing) "播放中…" else "▶ 播放",
-                        color = if (isDark) lerp(accent, Color.White, 0.25f)
-                        else lerp(accent, Color(0xFF08161E), 0.55f),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
+                Text(
+                    text = "点击即播放",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                    fontSize = 9.sp,
+                    letterSpacing = 0.6.sp,
+                )
             }
         }
     }

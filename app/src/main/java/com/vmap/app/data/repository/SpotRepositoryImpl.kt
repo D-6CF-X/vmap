@@ -41,6 +41,12 @@ class SpotRepositoryImpl(
         spotDao.upsert(spot.copy(updatedAt = System.currentTimeMillis(), synced = false))
     }
 
+    override suspend fun saveIfAbsent(spot: Spot): Boolean {
+        if (spotDao.findById(spot.id) != null) return false
+        spotDao.upsert(spot.copy(updatedAt = System.currentTimeMillis(), synced = false))
+        return true
+    }
+
     override suspend fun softDelete(id: String) {
         spotDao.softDelete(id, System.currentTimeMillis())
     }

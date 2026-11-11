@@ -38,6 +38,9 @@ interface SpotRepository {
 
     suspend fun save(spot: Spot)
 
+    /** 只在 id 不存在时写入，用于历年演出档案的自动导入（重复启动不会重复插入）。 */
+    suspend fun saveIfAbsent(spot: Spot): Boolean
+
     suspend fun softDelete(id: String)
 
     suspend fun addPhoto(photo: Photo)

@@ -119,6 +119,8 @@ fun ChinaMapCanvas(
     tourSpots: List<Spot> = emptyList(),
     /** 是否正在播放巡演动画。 */
     tourPlaying: Boolean = false,
+    /** 播放轮次：每次点年份递增，用来重启动画（点同一年也能重播）。 */
+    tourRunId: Int = 0,
     /** 动画播放完毕回调（用于复位外部状态）。 */
     onTourEnd: () -> Unit = {},
 ) {
@@ -144,12 +146,13 @@ fun ChinaMapCanvas(
     }
 
     val visitedAdcodes = remember(activeSpots) {
-        activeSpots.map { it.adcode }.toSet()
+        activeSpots.map { it.adcode }.filter { it.isNotBlank() }.toSet()
     }
 
-    // 每个城市去过的年份（升序去重），决定地块的年份渐变
+    // 每个城市去过的年份（升序去重），决定地块的年份渐变。线上活动没有城市，排除。
     val cityYears = remember(activeSpots) {
-        activeSpots.groupBy { it.adcode }
+        activeSpots.filter { it.adcode.isNotBlank() }
+            .groupBy { it.adcode }
             .mapValues { (_, v) -> v.map { yearOf(it.performedAt) }.distinct().sorted() }
     }
     // 全局年份范围，用于把年份映射成深浅
@@ -164,7 +167,9 @@ fun ChinaMapCanvas(
 
     // 综合模式下每个城市按自己归属的板块上色；同城两板块都有就用两色的中间值
     val citySections = remember(activeSpots) {
-        activeSpots.groupBy { it.adcode }.mapValues { (_, v) -> v.map { s -> s.section }.distinct() }
+        activeSpots.filter { it.adcode.isNotBlank() }
+            .groupBy { it.adcode }
+            .mapValues { (_, v) -> v.map { s -> s.section }.distinct() }
     }
 
     /** 单个城市的点亮色：单板块模式就是应援色，综合模式按归属混合。 */
@@ -191,7 +196,7 @@ fun ChinaMapCanvas(
     val tone = remember { ToneGenerator(AudioManager.STREAM_MUSIC, 70) }
 
     // 播放动画驱动：用 withFrameNanos 手动推进，每个阶段持续一段时间后切换
-    LaunchedEffect(tourPlaying, tourSpots) {
+    LaunchedEffect(tourPlaying, tourSpots, tourRunId) {
         if (!tourPlaying || tourSpots.isEmpty()) {
             tourPhase = TourPhase.Idle
             tourLitCount = 0
@@ -203,9 +208,10 @@ fun ChinaMapCanvas(
         val n = tourSpots.size
         var prevNanos = 0L
         // 阶段时长（毫秒）
-        val flyMs = 900L
-        val burstMs = 600L
-        val flashMs = 320L
+        val flyMs = 860L
+        val burstMs = 620L
+        val flashMs = 420L
+        val onlineMs = 1500L
         val rippleMs = 1600L
 
         fun playTone(step: Int) {
@@ -222,64 +228,46 @@ fun ChinaMapCanvas(
             }
         }
 
-        // 逐城推进
-        var fromIndex = -1
-        for (toIndex in 0 until n) {
-            // FLY：从上一城（或起点）飞到 toIndex
-            if (fromIndex >= 0) {
-                var t = 0f
-                prevNanos = 0L
-                while (t < 1f) {
-                    withFrameNanos { now ->
-                        if (prevNanos == 0L) prevNanos = now
-                        val dtMs = (now - prevNanos) / 1_000_000f
-                        prevNanos = now
-                        t = (t + dtMs / flyMs).coerceAtMost(1f)
-                        tourPhase = TourPhase.Fly(fromIndex, toIndex, t)
-                    }
-                }
-            }
-            // BURST：粒子扩散填满 toIndex 城
-            var bt = 0f
+        /** 跑一个阶段到结束，[emit] 每帧收到 0..1 的进度。 */
+        suspend fun runPhase(durationMs: Long, emit: (Float) -> Unit) {
+            var t = 0f
             prevNanos = 0L
-            while (bt < 1f) {
+            emit(0f)
+            while (t < 1f) {
                 withFrameNanos { now ->
                     if (prevNanos == 0L) prevNanos = now
                     val dtMs = (now - prevNanos) / 1_000_000f
                     prevNanos = now
-                    bt = (bt + dtMs / burstMs).coerceAtMost(1f)
-                    tourPhase = TourPhase.Burst(toIndex, bt)
+                    t = (t + dtMs / durationMs).coerceAtMost(1f)
+                    emit(t)
                 }
             }
+        }
+
+        // 逐场推进。线上活动没有城市：不飞、不点亮，只飘一条活动名。
+        var lastRealIndex = -1
+        for (i in 0 until n) {
+            val spot = tourSpots[i]
+            if (spot.adcode.isBlank()) {
+                runPhase(onlineMs) { t -> tourPhase = TourPhase.Online(i, t) }
+                tourLitCount = i + 1
+                continue
+            }
+            // FLY：从上一座已点亮的实体城市飞来（中间夹着线上活动也不影响连线）
+            if (lastRealIndex >= 0) {
+                runPhase(flyMs) { t -> tourPhase = TourPhase.Fly(lastRealIndex, i, t) }
+            }
+            // BURST：蒙版式扩散填满这座城市
+            runPhase(burstMs) { t -> tourPhase = TourPhase.Burst(i, t) }
             // FLASH：高亮闪一下 + 音效
-            tourLitCount = toIndex + 1
-            playTone(toIndex)
-            var ft = 0f
-            prevNanos = 0L
-            while (ft < 1f) {
-                withFrameNanos { now ->
-                    if (prevNanos == 0L) prevNanos = now
-                    val dtMs = (now - prevNanos) / 1_000_000f
-                    prevNanos = now
-                    ft = (ft + dtMs / flashMs).coerceAtMost(1f)
-                    tourPhase = TourPhase.Flash(toIndex, ft)
-                }
-            }
-            fromIndex = toIndex
+            tourLitCount = i + 1
+            playTone(i)
+            runPhase(flashMs) { t -> tourPhase = TourPhase.Flash(i, t) }
+            lastRealIndex = i
         }
 
         // RIPPLE：整体波纹扩散
-        var rt = 0f
-        prevNanos = 0L
-        while (rt < 1f) {
-            withFrameNanos { now ->
-                if (prevNanos == 0L) prevNanos = now
-                val dtMs = (now - prevNanos) / 1_000_000f
-                prevNanos = now
-                rt = (rt + dtMs / rippleMs).coerceAtMost(1f)
-                tourPhase = TourPhase.Ripple(rt)
-            }
-        }
+        runPhase(rippleMs) { t -> tourPhase = TourPhase.Ripple(t) }
 
         // 播放结束，保持全亮
         tourPhase = TourPhase.Idle
@@ -303,7 +291,7 @@ fun ChinaMapCanvas(
     val labelLayouts = remember(provinces) {
         provinces.associate { p ->
             p.adcode to textMeasurer.measure(
-                text = AnnotatedString(p.name),
+                text = AnnotatedString(shortCityName(p.name)),
                 style = TextStyle(fontSize = 9.sp),
                 constraints = Constraints(maxWidth = 200),
             )
@@ -314,7 +302,7 @@ fun ChinaMapCanvas(
     val litLabelLayouts = remember(provinces) {
         provinces.associate { p ->
             p.adcode to textMeasurer.measure(
-                text = AnnotatedString(p.name),
+                text = AnnotatedString(shortCityName(p.name)),
                 style = TextStyle(
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
@@ -325,12 +313,42 @@ fun ChinaMapCanvas(
         }
     }
 
+    // 缩小态的城市名：小一号，但必须有——全国视野也能认出各座城市
+    val smallCityLayouts = remember(provinces) {
+        provinces.associate { p ->
+            p.adcode to textMeasurer.measure(
+                text = AnnotatedString(shortCityName(p.name)),
+                style = TextStyle(fontSize = 7.5.sp),
+                constraints = Constraints(maxWidth = 200),
+            )
+        }
+    }
+
+    // 线上活动的名字（巡演时飘出来的那条），按场次预先量好
+    val tourTitleLayouts = remember(tourSpots) {
+        tourSpots.associate { s ->
+            s.id to textMeasurer.measure(
+                text = AnnotatedString(s.title),
+                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp),
+                constraints = Constraints(maxWidth = 640),
+            )
+        }
+    }
+    // 「线上演出」小标签
+    val onlineTagLayout = remember {
+        textMeasurer.measure(
+            text = AnnotatedString("线上演出"),
+            style = TextStyle(fontSize = 9.sp, letterSpacing = 2.sp),
+            constraints = Constraints(maxWidth = 200),
+        )
+    }
+
     // 省级名字（全国视图只显示省名用）
     val provinceLabels = remember { ChinaMapData.loadProvinceLabels(context) }
     val provinceLayouts = remember(provinceLabels) {
         provinceLabels.associate { label ->
             label.name to textMeasurer.measure(
-                text = AnnotatedString(label.name),
+                text = AnnotatedString(shortCityName(label.name)),
                 style = TextStyle(fontSize = 11.sp),
                 constraints = Constraints(maxWidth = 300),
             )
@@ -397,7 +415,7 @@ fun ChinaMapCanvas(
         // 巡演播放时，点亮集合由动画进度决定（已完成 burst 的城市才点亮），路线也只画已走过的段
         val isTouring = tourPlaying && tourSpots.isNotEmpty()
         val litAdcodesNow: Set<String> = if (isTouring) {
-            tourSpots.take(tourLitCount).map { it.adcode }.toSet()
+            tourSpots.take(tourLitCount).map { it.adcode }.filter { it.isNotBlank() }.toSet()
         } else {
             visitedAdcodes
         }
@@ -638,7 +656,22 @@ fun ChinaMapCanvas(
                 tryPlace(layout, p.label, color, p.bounds, 1f, emboss = embossFor(color))
             }
 
-        if (scale < DETAIL_ZOOM) {
+        // 城市名：任何时候都要有，只是大小和数量随缩放变化。
+        // 缩小态用 7.5sp 小字、只画面积较大的城市；放大态换 9sp 并逐步放开数量。
+        // 先画城市名（用户要的城市信息），省名只在缩得很小时补位，撞上城市名就让路。
+        val cityLimit = (28 + scale * 22f).toInt().coerceIn(32, 110)
+        val cityLayout = if (scale < DETAIL_ZOOM) smallCityLayouts else labelLayouts
+        val cityMinRatio = if (scale < DETAIL_ZOOM) 1.0f else 1.7f
+        provinces.filter { !litAdcodesNow.contains(it.adcode) }
+            .sortedByDescending { it.bounds.width * it.bounds.height }
+            .take(cityLimit)
+            .forEach { p ->
+                val layout = cityLayout[p.adcode] ?: return@forEach
+                tryPlace(layout, p.label, palette.label.copy(alpha = 0.58f), p.bounds, cityMinRatio, shadow = plainShadow)
+            }
+
+        // 缩得很小时，省名作为更大的层级补在空位上
+        if (scale < 1.45f) {
             provinceLabels
                 .sortedByDescending { provinceBBoxes[it.adcode]?.let { r -> r.width * r.height } ?: 0f }
                 .forEach { label ->
@@ -646,23 +679,14 @@ fun ChinaMapCanvas(
                     val bbox = provinceBBoxes[label.adcode] ?: return@forEach
                     tryPlace(layout, Offset(label.x, label.y), palette.label, bbox, 1.2f, shadow = plainShadow)
                 }
-        } else {
-            // 放大态的城市名限量显示：按面积排重要度，只画前 N 个，放得越大画得越多。
-            // 全画出来会糊成一片，学高德宁缺毋滥。
-            val limit = (20 + (scale - DETAIL_ZOOM) * 12f).toInt().coerceIn(20, 70)
-            provinces.filter { !litAdcodesNow.contains(it.adcode) }
-                .sortedByDescending { it.bounds.width * it.bounds.height }
-                .take(limit)
-                .forEach { p ->
-                    val layout = labelLayouts[p.adcode] ?: return@forEach
-                    tryPlace(layout, p.label, palette.label.copy(alpha = 0.55f), p.bounds, 1.7f, shadow = plainShadow)
-                }
         }
 
         // 路线：3D 抛物线（向上拱、中间粗亮两端细淡、地面投影、飞行光点拖尾）
         // 巡演播放时默认路线不画，改由下面的动画绘制「已走过的段」
-        if (showRoute && !isTouring && activeRoute.size >= 2) {
-            activeRoute.zipWithNext { from, to ->
+        // 线上活动没有坐标，连线时跳过，避免连到 (0,0)
+        val routeStops = activeRoute.filter { it.adcode.isNotBlank() }
+        if (showRoute && !isTouring && routeStops.size >= 2) {
+            routeStops.zipWithNext { from, to ->
                 val a = toScreen(spotVirtual(from).x, spotVirtual(from).y)
                 val b = toScreen(spotVirtual(to).x, spotVirtual(to).y)
                 val ddx = b.x - a.x
@@ -711,27 +735,28 @@ fun ChinaMapCanvas(
 
         // ===== 巡演点亮动画绘制 =====
         if (isTouring) {
-            val tourN = tourSpots.size
-            // 相邻两城的屏幕坐标（按 tourSpots 顺序）
-            fun screenPos(i: Int): Offset = toScreen(
-                spotVirtual(tourSpots[i]).x,
-                spotVirtual(tourSpots[i]).y,
+            // 屏幕坐标按城市算（线上活动没有坐标，不参与连线）
+            fun spotPos(spot: Spot): Offset = toScreen(
+                spotVirtual(spot).x,
+                spotVirtual(spot).y,
             )
 
-            // 1) 已走过的段：0..tourLitCount-1 之间的相邻段画成淡抛物线（历史轨迹，不抢当前飞行段的亮度）
-            if (tourLitCount >= 2) {
-                for (i in 0 until (tourLitCount - 1).coerceAtMost(tourN - 1)) {
-                    val a = screenPos(i)
-                    val b = screenPos(i + 1)
-                    drawTourArc(a, b, accent, alpha = 0.40f)
-                }
+            // 1) 已走过的段：只连「已点亮的实体城市」，按时间顺序 1→2、2→3 串起来
+            val litReal = tourSpots.take(tourLitCount).filter { it.adcode.isNotBlank() }
+            for (i in 0 until litReal.size - 1) {
+                drawTourArc(spotPos(litReal[i]), spotPos(litReal[i + 1]), accent, alpha = 0.40f)
             }
 
-            // 2) 飞行中的段 + 光点
             val phase = tourPhase
-            if (phase is TourPhase.Fly) {
-                val a = screenPos(phase.fromIndex)
-                val b = screenPos(phase.toIndex)
+
+            // 2) 飞行中的段：拖尾从光点往后逐渐变淡，远处的轨迹沉成已走过段的淡色，
+            //    所以不会出现「线一下全亮、到站一下全删」的突兀感。
+            val flyFrom = (phase as? TourPhase.Fly)?.let { tourSpots.getOrNull(it.fromIndex) }
+            val flyTo = (phase as? TourPhase.Fly)?.let { tourSpots.getOrNull(it.toIndex) }
+            // 切换年份时旧阶段的索引可能已经越界，取不到就这帧不画
+            if (phase is TourPhase.Fly && flyFrom != null && flyTo != null) {
+                val a = spotPos(flyFrom)
+                val b = spotPos(flyTo)
                 val ddx = b.x - a.x
                 val ddy = b.y - a.y
                 val len = hypot(ddx, ddy)
@@ -741,17 +766,27 @@ fun ChinaMapCanvas(
                     if (ny > 0) { nx = -nx; ny = -ny }
                     val height = len * 0.28f
                     val ctrl = Offset((a.x + b.x) / 2 + nx * height, (a.y + b.y) / 2 + ny * height)
-                    // 已走过的抛物线部分（0..t）
-                    val segs = 24
+                    // 只画已经飞过的一段，并让亮度随「离光点多远」衰减
+                    val segs = 40
+                    val trailSpan = 0.55f
                     for (i in 0 until segs) {
-                        val t0 = i / segs.toFloat() * phase.t
-                        val t1 = (i + 1) / segs.toFloat() * phase.t
-                        if (t1 <= 0f) continue
-                        val p0 = quadPoint(a, ctrl, b, t0)
-                        val p1 = quadPoint(a, ctrl, b, t1)
-                        drawLine(accent.copy(alpha = 0.9f), p0, p1, strokeWidth = 3.5f, cap = StrokeCap.Round)
+                        val t0 = i / segs.toFloat()
+                        val t1 = (i + 1) / segs.toFloat()
+                        if (t0 >= phase.t) break
+                        val behind = phase.t - (t0 + t1) / 2f
+                        // 越靠后越淡，但保留 0.42 的底色，到站后正好接上已走过段的淡线
+                        val near = (1f - behind / trailSpan).coerceIn(0f, 1f)
+                        val alpha = 0.42f + 0.55f * near
+                        val width = 1.3f + 2.6f * near
+                        drawLine(
+                            accent.copy(alpha = alpha.coerceAtMost(0.97f)),
+                            quadPoint(a, ctrl, b, t0),
+                            quadPoint(a, ctrl, b, t1),
+                            strokeWidth = width,
+                            cap = StrokeCap.Round,
+                        )
                     }
-                    // 飞行光点：线上唯一的一个白芯光点（就是"3D立体箭头"，不是单独的箭头，也不带拖尾）
+                    // 飞行光点：线上唯一的一个白芯光点（就是"3D立体箭头"，不带多余拖尾圆）
                     val pos = quadPoint(a, ctrl, b, phase.t)
                     drawCircle(accent.copy(alpha = 0.32f), radius = 11f, center = pos)
                     drawCircle(Color.White.copy(alpha = 0.98f), radius = 4.5f, center = pos)
@@ -760,9 +795,9 @@ fun ChinaMapCanvas(
 
             // 3) Burst：蒙版式扩散——以城市地块路径为蒙版，点亮色从质心向外铺满整块城市
             if (phase is TourPhase.Burst) {
-                val spot = tourSpots[phase.index]
-                val province = provinces.firstOrNull { it.adcode == spot.adcode }
-                if (province != null) {
+                val spot = tourSpots.getOrNull(phase.index)
+                val province = spot?.let { s -> provinces.firstOrNull { it.adcode == s.adcode } }
+                if (spot != null && province != null) {
                     // 城市质心用虚拟坐标，与 province.path 同系
                     val vc = spotVirtual(spot)
                     val halfW = (province.bounds.right - province.bounds.left) / 2f
@@ -799,10 +834,26 @@ fun ChinaMapCanvas(
                 }
             }
 
+            // 3.5) 刚飞完的那一段：亮度从飞行态平滑沉到已走过段的淡色，不会一下被删掉
+            if (phase is TourPhase.Burst || phase is TourPhase.Flash) {
+                val idx = if (phase is TourPhase.Burst) phase.index else (phase as TourPhase.Flash).index
+                val t = if (phase is TourPhase.Burst) phase.t * 0.5f else 0.5f + (phase as TourPhase.Flash).t * 0.5f
+                val prevReal = tourSpots.take(idx).lastOrNull { it.adcode.isNotBlank() }
+                val arrived = tourSpots.getOrNull(idx)
+                if (prevReal != null && arrived != null) {
+                    drawTourArc(
+                        spotPos(prevReal),
+                        spotPos(arrived),
+                        accent,
+                        alpha = 0.92f + (0.40f - 0.92f) * t,
+                    )
+                }
+            }
+
             // 4) Flash：到达后高亮闪一下
             if (phase is TourPhase.Flash) {
-                val spot = tourSpots[phase.index]
-                val province = provinces.firstOrNull { it.adcode == spot.adcode }
+                val spot = tourSpots.getOrNull(phase.index)
+                val province = spot?.let { s -> provinces.firstOrNull { it.adcode == s.adcode } }
                 if (province != null) {
                     // 白色闪光，先亮后淡
                     val flashAlpha = (1f - phase.t) * 0.8f
@@ -820,10 +871,64 @@ fun ChinaMapCanvas(
                 }
             }
 
-            // 5) Ripple：全部点亮后整体波纹扩散
+            // 4.5) 线上活动：没有实体城市，就在地图中央飘一条活动名，浮现—停留—淡出
+            if (phase is TourPhase.Online) {
+                val spot = tourSpots.getOrNull(phase.index)
+                val layout = spot?.let { tourTitleLayouts[it.id] }
+                if (layout != null) {
+                    val appear = (phase.t / 0.20f).coerceIn(0f, 1f)
+                    val vanish = ((1f - phase.t) / 0.30f).coerceIn(0f, 1f)
+                    val alpha = appear * vanish
+                    val rise = (1f - appear) * 14f - (1f - vanish) * 10f
+                    val tw = layout.size.width.toFloat()
+                    val th = layout.size.height.toFloat()
+                    val cx = size.width / 2f
+                    val cy = size.height * 0.44f + rise
+                    val x = cx - tw / 2f
+                    val y = cy - th / 2f
+                    // 背后一层柔光，让白字压在复杂地图上也看得清
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            0f to accent.copy(alpha = 0.30f * alpha),
+                            1f to Color.Transparent,
+                            center = Offset(cx, cy + th / 2),
+                            radius = (tw * 0.9f).coerceAtLeast(24f),
+                        ),
+                        radius = (tw * 0.9f).coerceAtLeast(24f),
+                        center = Offset(cx, cy + th / 2),
+                    )
+                    // 「线上演出」小标签，居中排在活动名上方
+                    val tagLayout = onlineTagLayout
+                    drawText(
+                        tagLayout,
+                        color = accent.copy(alpha = 0.85f * alpha),
+                        topLeft = Offset(cx - tagLayout.size.width / 2f, y - tagLayout.size.height - 8f),
+                    )
+                    drawText(
+                        layout,
+                        brush = Brush.verticalGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.55f + 0.45f * darkProgress),
+                                accent.copy(alpha = 1f),
+                            ),
+                            startY = y,
+                            endY = y + th,
+                        ),
+                        topLeft = Offset(x, y),
+                        alpha = alpha,
+                        shadow = Shadow(
+                            color = accent.copy(alpha = 0.75f * alpha),
+                            offset = Offset(0f, 0f),
+                            blurRadius = 12f,
+                        ),
+                    )
+                }
+            }
+
+            // 5) Ripple：全部点亮后整体波纹扩散（线上活动没有坐标，不参与）
             if (phase is TourPhase.Ripple) {
-                tourSpots.forEach { spot ->
-                    val c = toScreen(spotVirtual(spot).x, spotVirtual(spot).y)
+                tourSpots.filter { it.adcode.isNotBlank() }.forEach { spot ->
+                    val c = spotPos(spot)
                     val wave = phase.t
                     // 从每座城市发出的扩散波纹环
                     drawCircle(
@@ -883,6 +988,8 @@ private sealed interface TourPhase {
     data class Fly(val fromIndex: Int, val toIndex: Int, val t: Float) : TourPhase
     data class Burst(val index: Int, val t: Float) : TourPhase
     data class Flash(val index: Int, val t: Float) : TourPhase
+    /** 线上活动：不点亮地块，只在地图中央把活动名浮现出来再淡掉。 */
+    data class Online(val index: Int, val t: Float) : TourPhase
     data class Ripple(val t: Float) : TourPhase
 }
 
@@ -901,6 +1008,29 @@ private fun yearOf(timestamp: Long): Int {
     val cal = java.util.Calendar.getInstance()
     cal.timeInMillis = timestamp
     return cal.get(java.util.Calendar.YEAR)
+}
+
+/** 行政区后缀，地图标注上去掉——「巴音郭楞蒙古自治州」写成「巴音郭楞」才放得下。 */
+private val CITY_SUFFIXES = listOf("特别行政区", "自治州", "自治县", "地区", "市", "盟", "县")
+
+/** 自治州里的民族段，如「阿坝·藏族羌族·自治州」，截掉只剩地名。 */
+private val ETHNIC_SEGMENTS = listOf(
+    "藏族", "羌族", "土家族", "苗族", "彝族", "壮族", "布依族", "侗族", "哈尼族", "傣族",
+    "白族", "景颇族", "傈僳族", "回族", "朝鲜族", "蒙古", "哈萨克", "柯尔克孜", "维吾尔",
+    "锡伯", "裕固", "东乡", "保安", "撒拉", "土族", "达斡尔", "鄂温克", "鄂伦春", "满族",
+    "瑶族", "畲族", "黎族", "仡佬族", "水族", "毛南族", "仫佬族", "京族", "普米族", "怒族",
+    "独龙族", "阿昌族", "德昂族", "基诺族", "布朗族", "拉祜族", "佤族", "纳西族",
+)
+
+/** 城市标注用的短名：去后缀、去民族段。 */
+private fun shortCityName(raw: String): String {
+    var n = raw
+    CITY_SUFFIXES.firstOrNull { n.endsWith(it) }?.let { n = n.dropLast(it.length) }
+    ETHNIC_SEGMENTS.forEach { e ->
+        val i = n.indexOf(e)
+        if (i >= 1) n = n.substring(0, i)
+    }
+    return n.ifBlank { raw }
 }
 
 /** 二次贝塞尔曲线上的点。 */

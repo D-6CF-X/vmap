@@ -159,6 +159,9 @@ private fun VMapRoot() {
 
     val isDark by viewModel.isDark.collectAsStateWithLifecycle()
 
+    // 首次启动自动导入历年演出档案，地图上每年的演出路径直接可用
+    LaunchedEffect(Unit) { viewModel.autoImportArchive(context) }
+
     VMapTheme(darkTheme = isDark) {
         var page by remember { mutableStateOf(Page.MAP) }
         var showLightSheet by remember { mutableStateOf(false) }
