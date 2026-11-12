@@ -38,6 +38,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -94,11 +95,12 @@ fun SongBoardScreen(
     var compact by remember { mutableStateOf(prefs.getBoolean(KEY_COMPACT, true)) }
 
     // 筛选：板块 / 年份 / 演唱会系列 / 单场。组合起来就是「某年某轮某站」的排行。
-    var seriesFilter by remember { mutableStateOf("") }
-    var yearFilter by remember { mutableStateOf(0) }
-    var tourFilter by remember { mutableStateOf("") }
+    // 用 rememberSaveable：横竖屏切换会重建 Activity，普通 remember 会让筛选选项全归零。
+    var seriesFilter by rememberSaveable { mutableStateOf("") }
+    var yearFilter by rememberSaveable { mutableStateOf(0) }
+    var tourFilter by rememberSaveable { mutableStateOf("") }
     // 选中具体某一场（存档案 id）：用来把排行定位到「纯蓝幻乐 长沙场」
-    var sessionPick by remember { mutableStateOf<String?>(null) }
+    var sessionPick by rememberSaveable { mutableStateOf<String?>(null) }
 
     // 当前系列下的场次（城市 + 日期），选中系列后才会显示
     val concertEvents = remember(context) {
@@ -209,7 +211,11 @@ fun SongBoardScreen(
 
         val tierIds = rows.firstOrNull { it.first.id == targetId }?.second?.map { it.id }?.toSet() ?: return
         val cards = cardBounds.filterKeys { it in tierIds }
-        if (cards.isEmpty()) return
+        // 空档也能落：没有卡可数，就放到第 0 位（「拖到这里」占位块的位置）
+        if (cards.isEmpty()) {
+            viewModel.moveSong(song.id, targetId, 0)
+            return
+        }
 
         // tier 墙是二维网格：先比行（y 差超过半格算换行），同一行内再比列
         val before = cards.count { (_, r) ->
