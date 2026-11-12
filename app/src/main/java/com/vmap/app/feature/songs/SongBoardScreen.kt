@@ -91,10 +91,30 @@ fun SongBoardScreen(
     val prefs = remember(context) { context.getSharedPreferences(UI_PREFS, Context.MODE_PRIVATE) }
     var compact by remember { mutableStateOf(prefs.getBoolean(KEY_COMPACT, true)) }
 
-    // 筛选：板块 / 年份 / 演唱会系列。三者都能单独用，组合起来就是「某年某轮巡演」的排行。
+    // 筛选：板块 / 年份 / 演唱会系列 / 单场。组合起来就是「某年某轮某站」的排行。
     var seriesFilter by remember { mutableStateOf("") }
     var yearFilter by remember { mutableStateOf(0) }
     var tourFilter by remember { mutableStateOf("") }
+    // 选中具体某一场（存档案 id）：用来把排行定位到「纯蓝幻乐 长沙场」
+    var sessionPick by remember { mutableStateOf<String?>(null) }
+
+    // 当前系列下的场次（城市 + 日期），选中系列后才会显示
+    val concertEvents = remember(context) {
+        com.vmap.app.data.archive.ConcertArchive.load(context)
+    }
+    val tourSessions = remember(tourFilter, concertEvents) {
+        if (tourFilter.isBlank()) {
+            emptyList()
+        } else {
+            concertEvents
+                .filter { !it.online }
+                .filter { e ->
+                    // 档案里写好的 tour 优先，其次才从演出名里推
+                    (e.tour.ifBlank { com.vmap.app.core.text.seriesOfEventName(e.name) }) == tourFilter
+                }
+                .sortedByDescending { it.dateLabel }
+        }
+    }
 
     val years = remember(allSongs) {
         allSongs.asSequence()
@@ -221,10 +241,16 @@ fun SongBoardScreen(
                     GradientTitle(text = "歌曲鉴赏", accent = accent, fontSize = 24.sp)
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        text = if (filtering) {
-                            "${songs.size} / ${allSongs.size} 首 · 按演唱会登场次数归档"
-                        } else {
-                            "${allSongs.size} 首 · 封面取 B 站（官方 > 最高播放）· 长按拖动排序"
+                        text = when {
+                            // 选了具体某一站：说清楚这是「这一轮」的曲目，同一轮各站唱的基本一致
+                            sessionPick != null -> {
+                                val s = tourSessions.firstOrNull { it.id == sessionPick }
+                                "${s?.city ?: ""} ${s?.let { com.vmap.app.core.text.monthDayOf(it.dateLabel) } ?: ""}" +
+                                    " · ${songs.size} 首 · 同一轮各站曲目相通"
+                            }
+
+                            filtering -> "${songs.size} / ${allSongs.size} 首 · 按演唱会登场次数归档"
+                            else -> "${allSongs.size} 首 · 封面取 B 站（官方 > 最高播放）· 长按拖动排序"
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 11.sp,
@@ -280,12 +306,50 @@ fun SongBoardScreen(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             item(key = "tour-all") {
-                                FilterChip("全部系列", tourFilter.isBlank(), accent, isDark) { tourFilter = "" }
+                                FilterChip("全部系列", tourFilter.isBlank(), accent, isDark) {
+                                    tourFilter = ""
+                                    sessionPick = null
+                                }
                             }
                             tours.forEach { t ->
                                 item(key = "tour-$t") {
                                     FilterChip(t, tourFilter == t, accent, isDark) {
                                         tourFilter = if (tourFilter == t) "" else t
+                                        sessionPick = null
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 选了系列之后，再往下钻一层：这一轮巡演的具体场次（城市 + 日期）
+                    // 点某一场就把年份锁到那一年，等于看「这一站这一轮唱的歌」的排行
+                    if (tourSessions.isNotEmpty() && !landscape) {
+                        Spacer(Modifier.height(6.dp))
+                        androidx.compose.foundation.lazy.LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            item(key = "sess-all") {
+                                FilterChip("全部场次", sessionPick == null, accent, isDark) {
+                                    sessionPick = null
+                                    yearFilter = 0
+                                }
+                            }
+                            tourSessions.forEach { e ->
+                                item(key = "sess-${e.id}") {
+                                    FilterChip(
+                                        label = "${e.city} ${com.vmap.app.core.text.monthDayOf(e.dateLabel)}",
+                                        selected = sessionPick == e.id,
+                                        accent = accent,
+                                        isDark = isDark,
+                                    ) {
+                                        if (sessionPick == e.id) {
+                                            sessionPick = null
+                                            yearFilter = 0
+                                        } else {
+                                            sessionPick = e.id
+                                            yearFilter = e.year
+                                        }
                                     }
                                 }
                             }

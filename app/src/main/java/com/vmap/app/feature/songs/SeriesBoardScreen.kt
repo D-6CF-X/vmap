@@ -41,8 +41,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.vmap.app.core.text.monthDayOf
+import com.vmap.app.core.text.seriesOfEventName
 import com.vmap.app.core.ui.GradientTitle
 import com.vmap.app.core.ui.glassPanel
+import com.vmap.app.data.archive.ConcertArchive
 import com.vmap.app.data.song.SongArchive
 import com.vmap.app.feature.web.WebViewerDialog
 import java.io.File
@@ -67,6 +70,28 @@ private data class SeriesGroup(
     val years: List<Int>,
 )
 
+/** 一场具体演出（可以精确到「纯蓝幻乐·长沙站」）。 */
+private data class ConcertSession(
+    val id: String,
+    val series: String,
+    val year: Int,
+    val city: String,
+    val dateLabel: String,
+    val section: String,
+    val online: Boolean,
+) {
+    /** 场次小标签：长沙 08.22 */
+    val chipLabel: String
+        get() = buildString {
+            append(city)
+            val md = monthDayOf(dateLabel)
+            if (md.isNotBlank() && md != dateLabel) {
+                append(" ")
+                append(md)
+            }
+        }
+}
+
 /**
  * 系列歌单：按演唱会系列把曲目重新收一遍。
  *
@@ -87,6 +112,10 @@ fun SeriesBoardScreen(
     val allSongs by viewModel.songs.collectAsStateWithLifecycle()
     var seriesFilter by remember { mutableStateOf("") }
     var playingUrl by remember { mutableStateOf("") }
+    // 选中某一场演出后，页面只留这个系列、这一年
+    var activeSession by remember { mutableStateOf<ConcertSession?>(null) }
+    // 展开中的系列（显示它的场次 chips）
+    var expandedSeries by remember { mutableStateOf<String?>(null) }
 
     // 库里那套（用户的封面、手动改过的字段都在）
     val dbItems = remember(allSongs, context) {
@@ -124,6 +153,28 @@ fun SeriesBoardScreen(
     // 库里有系列信息就用库，没有就用档案（老数据 tour 为空的情况）
     val baseItems = if (dbItems.any { it.tour.isNotBlank() }) dbItems else archiveItems
 
+    // 场次：从演出档案里按系列归好，用来把「纯蓝幻乐 · 长沙站」这种单场单独筛出来。
+    // 系列名优先用档案里写好的 tour（和歌曲的 tour 对齐），没写才从演出名里推。
+    val concertEvents = remember(context) { ConcertArchive.load(context) }
+    val sessionsBySeries = remember(concertEvents) {
+        concertEvents
+            .filter { !it.online }
+            .map { e ->
+                ConcertSession(
+                    id = e.id,
+                    series = e.tour.ifBlank { seriesOfEventName(e.name) },
+                    year = e.year,
+                    city = e.city,
+                    dateLabel = e.dateLabel,
+                    section = e.section.name,
+                    online = e.online,
+                )
+            }
+            .filter { it.series.isNotBlank() }
+            .groupBy { it.series }
+            .mapValues { (_, v) -> v.sortedByDescending { it.dateLabel } }
+    }
+
     val groups = remember(baseItems, seriesFilter) {
         baseItems
             .filter { s -> seriesFilter.isBlank() || s.series == seriesFilter }
@@ -152,7 +203,22 @@ fun SeriesBoardScreen(
             )
     }
 
-    val totalSongs = remember(groups) { groups.sumOf { it.songs.size } }
+    // 选中某一场之后：只留这个系列，且只留那年唱过的歌
+    val visibleGroups = remember(groups, activeSession) {
+        val session = activeSession ?: return@remember groups
+        groups
+            .filter { it.name == session.series }
+            .map { g ->
+                g.copy(
+                    songs = g.songs.filter { item ->
+                        item.years.split(',').any { it.trim().toIntOrNull() == session.year }
+                    },
+                )
+            }
+            .filter { it.songs.isNotEmpty() }
+    }
+
+    val totalSongs = remember(visibleGroups) { visibleGroups.sumOf { it.songs.size } }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -163,7 +229,11 @@ fun SeriesBoardScreen(
                 GradientTitle(text = "系列歌单", accent = accent, fontSize = 24.sp)
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = "${groups.size} 个系列 · ${totalSongs} 首 · 同一首歌唱过几轮，就进几个系列",
+                    text = if (activeSession == null) {
+                        "${visibleGroups.size} 个系列 · ${totalSongs} 首 · 点每个系列右边的「场次」可以筛到单场"
+                    } else {
+                        "${activeSession!!.series} · ${activeSession!!.chipLabel} · ${totalSongs} 首 · 同一轮各站曲目相通"
+                    },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp,
                 )
@@ -178,21 +248,40 @@ fun SeriesBoardScreen(
                     item(key = "m") {
                         SeriesChip("因音而遇", seriesFilter == "MIKU", accent, isDark) { seriesFilter = "MIKU" }
                     }
+                    // 正在筛某一场时，这里给一个「回到全部」的出口
+                    if (activeSession != null) {
+                        item(key = "clear") {
+                            SeriesChip("✕ 回到全部", true, accent, isDark) {
+                                activeSession = null
+                                expandedSeries = null
+                            }
+                        }
+                    }
                 }
                 Spacer(Modifier.height(4.dp))
             }
         }
 
-        items(groups, key = { it.name }) { group ->
+        items(visibleGroups, key = { it.name }) { group ->
             SeriesSection(
                 group = group,
+                sessions = sessionsBySeries[group.name].orEmpty(),
+                expanded = expandedSeries == group.name,
+                activeSession = activeSession,
                 isDark = isDark,
                 accent = accent,
+                onToggleSessions = {
+                    expandedSeries = if (expandedSeries == group.name) null else group.name
+                },
+                onPickSession = { session ->
+                    activeSession = session
+                    expandedSeries = null
+                },
                 onPlay = { url -> if (url.isNotBlank()) playingUrl = url },
             )
         }
 
-        if (groups.isEmpty()) {
+        if (visibleGroups.isEmpty()) {
             item(key = "empty") {
                 Text(
                     text = "还没有系列曲目——内置曲库导入完成后会自动出现",
@@ -209,12 +298,17 @@ fun SeriesBoardScreen(
     }
 }
 
-/** 一个系列：标题条（系列名 + 年份 + 首数）+ 一排横滑的曲目。 */
+/** 一个系列：标题条（系列名 + 年份 + 首数 + 场次入口）+ 场次 chips + 一排横滑的曲目。 */
 @Composable
 private fun SeriesSection(
     group: SeriesGroup,
+    sessions: List<ConcertSession>,
+    expanded: Boolean,
+    activeSession: ConcertSession?,
     isDark: Boolean,
     accent: Color,
+    onToggleSessions: () -> Unit,
+    onPickSession: (ConcertSession) -> Unit,
     onPlay: (String) -> Unit,
 ) {
     Column(modifier = Modifier.padding(top = 14.dp)) {
@@ -255,6 +349,40 @@ private fun SeriesSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                 fontSize = 10.sp,
             )
+            if (sessions.isNotEmpty()) {
+                Spacer(Modifier.width(6.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .border(1.dp, accent.copy(alpha = if (expanded) 0.65f else 0.28f), CircleShape)
+                        .clickable(onClick = onToggleSessions)
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                ) {
+                    Text(
+                        text = if (expanded) "收起" else "${sessions.size} 场",
+                        color = accent.copy(alpha = 0.9f),
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+            }
+        }
+        // 展开后的场次列表：可以把「纯蓝幻乐 · 长沙 08.22」这种单场筛出来
+        if (expanded && sessions.isNotEmpty()) {
+            Spacer(Modifier.height(7.dp))
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                items(sessions, key = { it.id }) { session ->
+                    SeriesChip(
+                        label = session.chipLabel,
+                        selected = activeSession?.id == session.id,
+                        accent = accent,
+                        isDark = isDark,
+                    ) { onPickSession(session) }
+                }
+            }
         }
         Spacer(Modifier.height(7.dp))
         LazyRow(

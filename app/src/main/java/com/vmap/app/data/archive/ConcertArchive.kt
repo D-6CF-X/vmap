@@ -26,6 +26,8 @@ data class ArchiveEvent(
     val note: String,
     val detail: String = "",
     val videoUrl: String = "",
+    /** 属于哪个巡演系列（和歌曲档案里的 tour 用同一套名字），用来按场次筛歌。 */
+    val tour: String = "",
     /** 纯线上演出：没有实体城市，地图上不点亮地块，巡演时只飘一条活动名。 */
     val online: Boolean = false,
 ) {
@@ -106,6 +108,7 @@ object ConcertArchive {
                         note = o.optString("note"),
                         detail = o.optString("detail"),
                         videoUrl = o.optString("videoUrl"),
+                        tour = o.optString("tour"),
                         online = o.optBoolean("online", false) || o.optString("city") == "线上",
                     )
                 }.sortedByDescending { it.performedAt }

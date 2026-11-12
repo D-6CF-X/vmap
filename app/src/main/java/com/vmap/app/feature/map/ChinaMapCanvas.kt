@@ -49,6 +49,7 @@ import com.vmap.app.core.audio.PianoTone
 import com.vmap.app.core.map.ChinaMapData
 import com.vmap.app.core.ui.accent
 import com.vmap.app.domain.model.Section
+import com.vmap.app.core.text.seriesOfEventName
 import com.vmap.app.domain.model.Spot
 import kotlinx.coroutines.launch
 import kotlin.math.hypot
@@ -297,7 +298,7 @@ fun ChinaMapCanvas(
             // 换系列了（比如从「流光协奏」走到「纯蓝幻乐」）：先弹一下系列名，
             // 只让官方线弹，我的线播的时候不重复
             if (withSound) {
-                val series = seriesOfEvent(spot.title)
+                val series = seriesOfEventName(spot.title)
                 if (series.isNotBlank() && series != lastSeries) {
                     lastSeries = series
                     bannerText = series
@@ -1625,21 +1626,14 @@ private fun shortCityName(raw: String): String {
  * 二次贝塞尔曲线上的点。航线就是一条干净的抛物线——
  * 之前叠了两条正弦让线"飘"，视觉上一直抖，还每帧多算两次 sin，已经去掉了。
  */
+/**
+ * 二次贝塞尔曲线上的点。航线就是一条干净的抛物线——
+ * 之前叠了两条正弦让线"飘"，视觉上一直抖，还每帧多算两次 sin，已经去掉了。
+ */
 private fun quadPoint(a: Offset, c: Offset, b: Offset, t: Float): Offset {
     val u = 1f - t
     return Offset(
         u * u * a.x + 2 * u * t * c.x + t * t * b.x,
         u * u * a.y + 2 * u * t * c.y + t * t * b.y,
     )
-}
-
-/**
- * 从演出名里认「系列」：优先取书名号里的内容
- * （「洛天依 2026「无限共鸣·纯蓝幻乐」· 上海站」→ 无限共鸣·纯蓝幻乐）；
- * 没有书名号的（Vsinger Live 2017 全息演唱会）就取「·」前面那一段。
- */
-private fun seriesOfEvent(title: String): String {
-    val m = Regex("「([^」]{1,24})」").find(title)
-    if (m != null) return m.groupValues[1].trim()
-    return title.substringBefore('·').trim()
 }
