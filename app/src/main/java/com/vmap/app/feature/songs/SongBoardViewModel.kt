@@ -43,17 +43,34 @@ class SongBoardViewModel(
         }
     }
 
-    /** 首次进入给一套默认档位，用户可以直接用，也可以全删了重建。 */
+    /**
+     * 首次进入给一套默认档位：神 / 夯 / 顶 / 赞 / 稳。
+     *
+     * 老用户库里还是 S/A/B/C 那套（而且没改过名字）的话，就地改名加一档，
+     * 评级 id 不动，所以已经拖好的歌不会错位；用户自己改过档名的就不碰。
+     */
     private suspend fun ensureDefaults() {
-        if (dao.ratingCount() > 0) return
-        dao.upsertRatings(
-            listOf(
-                SongRating(name = "S", color = 0xFFFF6B8B, orderIndex = 0),
-                SongRating(name = "A", color = 0xFFFFB454, orderIndex = 1),
-                SongRating(name = "B", color = 0xFF66CCFF, orderIndex = 2),
-                SongRating(name = "C", color = 0xFF8E9BAA, orderIndex = 3),
-            ),
-        )
+        val existing = dao.observeRatings().first().sortedBy { it.orderIndex }
+        val prefs = context.getSharedPreferences("vmap_seed", android.content.Context.MODE_PRIVATE)
+
+        if (existing.isEmpty()) {
+            dao.upsertRatings(DEFAULT_RATINGS)
+            prefs.edit().putBoolean(KEY_RATINGS_V2, true).apply()
+            return
+        }
+
+        if (prefs.getBoolean(KEY_RATINGS_V2, false)) return
+        val names = existing.map { it.name }
+        if (names == listOf("S", "A", "B", "C")) {
+            val renamed = existing.mapIndexed { i, r ->
+                val d = DEFAULT_RATINGS[i]
+                r.copy(name = d.name, color = d.color)
+            }
+            // 补上第五档「稳」，排在最后
+            val fifth = DEFAULT_RATINGS[4]
+            dao.upsertRatings(renamed + fifth)
+        }
+        prefs.edit().putBoolean(KEY_RATINGS_V2, true).apply()
     }
 
     /**
@@ -389,6 +406,18 @@ class SongBoardViewModel(
         // v6：B 站视频封面补齐后重新落一次盘。版本号变化那一次会用档案里的封面覆盖一遍
         // （包括之前手动换过的），之后启动不再动。
         const val KEY_SEEDED = "songs_seeded_v6"
+
+        /** 默认五档，从高到低。颜色从金到灰，正好是一条"越往下越低调"的色阶。 */
+        val DEFAULT_RATINGS = listOf(
+            SongRating(name = "神", color = 0xFFFFC53D, orderIndex = 0),
+            SongRating(name = "夯", color = 0xFFFF7A45, orderIndex = 1),
+            SongRating(name = "顶", color = 0xFF66CCFF, orderIndex = 2),
+            SongRating(name = "赞", color = 0xFF39C5BB, orderIndex = 3),
+            SongRating(name = "稳", color = 0xFF8E9BAA, orderIndex = 4),
+        )
+
+        /** 默认档位是否已经从 S/A/B/C 迁到 神/夯/顶/赞/稳。 */
+        const val KEY_RATINGS_V2 = "ratings_v2"
     }
 
     private fun parseLine(raw: String): Triple<String, String, Int>? {

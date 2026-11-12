@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EmojiEvents
@@ -93,6 +94,7 @@ import com.vmap.app.feature.archive.ArchiveScreen
 import com.vmap.app.feature.map.MapScreen
 import com.vmap.app.feature.map.MapViewModel
 import com.vmap.app.feature.review.YearReviewScreen
+import com.vmap.app.feature.songs.SeriesBoardScreen
 import com.vmap.app.feature.songs.SongBoardScreen
 import com.vmap.app.feature.songs.SongBoardViewModel
 import com.vmap.app.feature.spot.LightCitySheet
@@ -141,6 +143,7 @@ private enum class Page(val label: String, val icon: ImageVector) {
     ACHIEVEMENT("成就", Icons.Filled.EmojiEvents),
     REVIEW("年度回顾", Icons.Filled.CalendarMonth),
     SONGS("歌曲鉴赏", Icons.Filled.QueueMusic),
+    SERIES("系列歌单", Icons.Filled.Album),
 }
 
 @Composable
@@ -346,6 +349,12 @@ private fun VMapRoot() {
                         Page.ACHIEVEMENT -> AchievementScreen(viewModel = viewModel, isDark = isDark)
                         Page.REVIEW -> YearReviewScreen(viewModel = viewModel, isDark = isDark)
                         Page.SONGS -> SongBoardScreen(
+                            viewModel = songViewModel,
+                            isDark = isDark,
+                            accent = accent,
+                        )
+
+                        Page.SERIES -> SeriesBoardScreen(
                             viewModel = songViewModel,
                             isDark = isDark,
                             accent = accent,
