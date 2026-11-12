@@ -44,4 +44,12 @@ data class Song(
     val perfCount: Int = 0,
     /** 专辑名（网易云曲库给的信息）。 */
     val album: String = "",
+    /** B 站视频链接：官号投稿优先，没有官号就取播放量最高的一支。 */
+    val linkUrl: String = "",
+    /** 链接来源标签：B站官方 / B站最高播放 / B站非官方。 */
+    val linkLabel: String = "",
+    /** 该视频的 UP 主。 */
+    val linkAuthor: String = "",
+    /** 该视频的播放量。 */
+    val linkPlay: Int = 0,
 )

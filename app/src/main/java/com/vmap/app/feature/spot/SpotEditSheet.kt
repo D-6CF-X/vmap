@@ -101,6 +101,8 @@ fun SpotEditSheet(
     var showVideo by remember { mutableStateOf(false) }
     var detail by remember(spot) { mutableStateOf(spot.detail) }
     var videoUrl by remember(spot) { mutableStateOf(spot.videoUrl) }
+    // 我到底去没去：官方档案里的场次也能一键标成「我去过」，标了才进我的路线
+    var mine by remember(spot.id) { mutableStateOf(spot.mine) }
     // 2026「纯蓝幻乐」场次带官方表情包，点开看动图
     val stickers = remember(spot.title) { StickerPack.forSpot(spot.title) }
     var previewSticker by remember { mutableStateOf<Sticker?>(null) }
@@ -171,6 +173,43 @@ fun SpotEditSheet(
                         .format(Date(performedAt)),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp,
+                )
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            // 「我去过 / 没去」：官方档案里的场次默认不算我的行程，点一下才计入我的路线
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(
+                            if (mine) accent.copy(alpha = 0.22f)
+                            else Color.White.copy(alpha = 0.06f),
+                        )
+                        .border(
+                            1.dp,
+                            if (mine) accent.copy(alpha = 0.65f) else Color.White.copy(alpha = 0.18f),
+                            CircleShape,
+                        )
+                        .clickable {
+                            mine = !mine
+                            viewModel.setMine(spot.id, mine)
+                        }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        text = if (mine) "✓ 我去过这里" else "标记为去过",
+                        color = if (mine) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        fontWeight = if (mine) FontWeight.SemiBold else FontWeight.Normal,
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = if (mine) "已计入我的路线" else "只算官方场次",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                    fontSize = 10.sp,
                 )
             }
 
@@ -438,6 +477,7 @@ fun SpotEditSheet(
                                         venue = venue.trim(),
                                         note = note.trim(),
                                         performedAt = performedAt,
+                                        mine = mine,
                                     )
                                 )
                                 editing = false

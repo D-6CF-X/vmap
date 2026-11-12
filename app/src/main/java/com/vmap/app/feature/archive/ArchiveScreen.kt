@@ -147,7 +147,9 @@ fun ArchiveScreen(
                 }
             }
             items(list, key = { it.id }) { event ->
-                val recorded = existing.any { it.adcode == event.adcode && it.title == event.name }
+                val recorded = existing.any {
+                    it.id == "arc-${event.id}" || (it.adcode == event.adcode && it.title == event.name)
+                }
                 ArchiveRow(
                     event = event,
                     accent = accentNow,
@@ -155,10 +157,8 @@ fun ArchiveScreen(
                     recorded = recorded,
                     onRecord = {
                         if (!recorded) {
-                            scope.launch {
-                                viewModel.save(event.toSpot())
-                                Toast.makeText(context, "已添加足迹 · ${event.city}", Toast.LENGTH_SHORT).show()
-                            }
+                            viewModel.markArchive(event, true)
+                            Toast.makeText(context, "已记入我的行程 · ${event.city}", Toast.LENGTH_SHORT).show()
                         }
                     },
                 )
@@ -269,7 +269,7 @@ private fun RecordChip(
             .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {
         Text(
-            text = if (recorded) "已添加" else "快速添加",
+            text = if (recorded) "已去过" else "去过",
             color = if (recorded) {
                 MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             } else {

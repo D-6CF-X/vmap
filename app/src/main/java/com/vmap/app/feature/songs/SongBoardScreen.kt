@@ -1,11 +1,13 @@
 package com.vmap.app.feature.songs
 
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -19,8 +21,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
+import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.ViewAgenda
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -44,7 +52,6 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -60,10 +67,13 @@ import java.io.File
 /**
  * 歌曲鉴赏：海报墙式的曲目排行。
  *
- * 曲目与曲绘来自网易云音乐的历年演唱会歌单（首次进入自动导入），
- * 顶部可以按板块 / 年份 / 演唱会系列筛，筛完就是「某年某轮巡演」的排行。
- * 每个评级一组横向滚动的大幅曲绘卡（3:4 竖版），曲绘是绝对主体，
- * 歌名 / 歌手 / 登场次数用渐变暗角压在图上，评级用左上角色块角标表示。
+ * 曲目与曲绘来自网易云音乐曲库（曲绘优先取 B 站官方投稿封面），
+ * 顶部可以按板块 / 年份 / 演唱会系列筛。
+ *
+ * 两种密度：
+ * - 大图：每个评级一条横向大幅曲绘带（3:4 海报），适合慢慢看；
+ * - 小图：整个页面变成一个网格，一屏能塞二三十首，横屏会自动摊成更多列。
+ *
  * 长按曲绘拖动换位、换组，松手落库。没有曲绘的歌用应援色渐变 + 首字兜底。
  */
 @Composable
@@ -74,6 +84,10 @@ fun SongBoardScreen(
 ) {
     val ratings by viewModel.ratings.collectAsStateWithLifecycle()
     val allSongs by viewModel.songs.collectAsStateWithLifecycle()
+
+    val context = LocalContext.current
+    val prefs = remember(context) { context.getSharedPreferences(UI_PREFS, Context.MODE_PRIVATE) }
+    var compact by remember { mutableStateOf(prefs.getBoolean(KEY_COMPACT, true)) }
 
     // 筛选：板块 / 年份 / 演唱会系列。三者都能单独用，组合起来就是「某年某轮巡演」的排行。
     var seriesFilter by remember { mutableStateOf("") }
@@ -116,6 +130,18 @@ fun SongBoardScreen(
     val ratingIds = ratings.map { it.id }.toSet()
     val unrated = remember(songs, ratingIds) { songs.filter { it.ratingId !in ratingIds } }
 
+    val rows: List<Pair<SongRating, List<Song>>> = remember(grouped, unrated, filtering) {
+        buildList {
+            addAll(grouped)
+            if (unrated.isNotEmpty()) {
+                add(
+                    SongRating(name = "未分组", color = 0xFF8E9BAA, orderIndex = Int.MAX_VALUE) to
+                        unrated.sortedBy { it.orderIndex },
+                )
+            }
+        }
+    }
+
     // 拖动坐标系都走窗口坐标
     val rowBounds = remember { mutableStateMapOf<String, Rect>() }
     val cardBounds = remember { mutableStateMapOf<String, Rect>() }
@@ -128,36 +154,51 @@ fun SongBoardScreen(
     var showImport by remember { mutableStateOf(false) }
     var showRatings by remember { mutableStateOf(false) }
 
+    /**
+     * 松手落位。大图 / 小图共用一套逻辑：
+     * 先按落点的 y 找它属于哪个评级（最后一个标题条在它上方的），
+     * 再按阅读顺序数一下落点前有几张卡。
+     */
     fun commitDrag(song: Song) {
         val center = dragFrom + dragDelta
-        val targetId = rowBounds.entries.firstOrNull { it.value.contains(center) }?.key ?: return
-        val targetList = grouped.firstOrNull { it.first.id == targetId }?.second ?: return
+        val targetId = rowBounds.entries
+            .filter { it.value.top <= center.y }
+            .maxByOrNull { it.value.top }?.key ?: return
 
-        val known = targetList.mapIndexedNotNull { idx, s ->
-            cardBounds[s.id]?.let { idx to it }
-        }.filter { (_, r) ->
-            val row = rowBounds[targetId] ?: return@filter false
-            r.center.y >= row.top && r.center.y <= row.bottom
+        val tierIds = rows.firstOrNull { it.first.id == targetId }?.second?.map { it.id }?.toSet() ?: return
+        val cards = cardBounds.filterKeys { it in tierIds }
+        if (cards.isEmpty()) return
+
+        val before = cards.count { (_, r) ->
+            r.center.y < center.y - 14f ||
+                (kotlin.math.abs(r.center.y - center.y) <= 14f && r.center.x < center.x)
         }
-        if (known.isEmpty()) return
-
-        val before = known.count { it.second.center.x < center.x }
-        val raw = known.getOrNull(before)?.first ?: (known.last().first + 1)
-
         val sameRow = song.ratingId == targetId
-        val current = targetList.indexOfFirst { it.id == song.id }
-        val target = if (sameRow && raw > current) raw - 1 else raw
+        val current = rows.firstOrNull { it.first.id == targetId }
+            ?.second?.indexOfFirst { it.id == song.id } ?: -1
+        val target = if (sameRow && current >= 0 && before > current) before - 1 else before
         if (sameRow && target == current) return
         viewModel.moveSong(song.id, targetId, target)
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val landscape = maxWidth > maxHeight
+        // 小图模式按可用宽度摊列：竖屏 4 列左右，横屏能摊到 8～12 列，一屏能看二三十首
+        val columns = ((maxWidth - 20.dp) / 76.dp).toInt().coerceIn(3, 14)
+
         LazyVerticalStaggeredGrid(
-            columns = StaggeredGridCells.Fixed(1),
+            columns = if (compact) StaggeredGridCells.Fixed(columns) else StaggeredGridCells.Fixed(1),
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = 96.dp, bottom = 120.dp),
+            contentPadding = PaddingValues(
+                top = if (landscape) 62.dp else 92.dp,
+                bottom = 112.dp,
+                start = if (compact) 10.dp else 0.dp,
+                end = if (compact) 10.dp else 0.dp,
+            ),
+            horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 12.dp),
+            verticalItemSpacing = if (compact) 6.dp else 0.dp,
         ) {
-            item(key = "header", span = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan.FullLine) {
+            item(key = "header", span = StaggeredGridItemSpan.FullLine) {
                 Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                     GradientTitle(text = "歌曲鉴赏", accent = accent, fontSize = 24.sp)
                     Spacer(Modifier.height(2.dp))
@@ -165,18 +206,36 @@ fun SongBoardScreen(
                         text = if (filtering) {
                             "${songs.size} / ${allSongs.size} 首 · 按演唱会登场次数归档"
                         } else {
-                            "${allSongs.size} 首 · 曲目与曲绘来自网易云音乐 · 长按曲绘拖动排序"
+                            "${allSongs.size} 首 · 封面取 B 站（官方 > 最高播放）· 长按拖动排序"
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 11.sp,
                     )
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(9.dp))
 
-                    // 板块：天依 / 初音 / 全部
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip("全部板块", seriesFilter.isBlank(), accent, isDark) { seriesFilter = "" }
-                        FilterChip("依你随行", seriesFilter == "TIANYI", accent, isDark) { seriesFilter = "TIANYI" }
-                        FilterChip("因音而遇", seriesFilter == "MIKU", accent, isDark) { seriesFilter = "MIKU" }
+                    // 板块 + 工具挤在一行横向滚动，横屏时省下一整行高度
+                    androidx.compose.foundation.lazy.LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        item(key = "board-all") { FilterChip("全部板块", seriesFilter.isBlank(), accent, isDark) { seriesFilter = "" } }
+                        item(key = "board-t") { FilterChip("依你随行", seriesFilter == "TIANYI", accent, isDark) { seriesFilter = "TIANYI" } }
+                        item(key = "board-m") { FilterChip("因音而遇", seriesFilter == "MIKU", accent, isDark) { seriesFilter = "MIKU" } }
+                        item(key = "density") {
+                            DensityChip(
+                                compact = compact,
+                                accent = accent,
+                                isDark = isDark,
+                                onToggle = {
+                                    compact = !compact
+                                    prefs.edit().putBoolean(KEY_COMPACT, compact).apply()
+                                    cardBounds.clear()
+                                    rowBounds.clear()
+                                },
+                            )
+                        }
+                        item(key = "add") { ToolChip("＋ 歌曲", accent, isDark) { showAdd = true } }
+                        item(key = "import") { ToolChip("导入", accent, isDark) { showImport = true } }
+                        item(key = "rating") { ToolChip("评级", accent, isDark) { showRatings = true } }
                     }
                     Spacer(Modifier.height(6.dp))
 
@@ -196,8 +255,8 @@ fun SongBoardScreen(
                         }
                     }
 
-                    // 演唱会系列
-                    if (tours.size > 1) {
+                    // 演唱会系列（横屏时先收起来，把高度留给歌）
+                    if (tours.size > 1 && !landscape) {
                         Spacer(Modifier.height(6.dp))
                         androidx.compose.foundation.lazy.LazyRow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -214,77 +273,77 @@ fun SongBoardScreen(
                             }
                         }
                     }
-
-                    Spacer(Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ToolChip("＋ 歌曲", accent, isDark) { showAdd = true }
-                        ToolChip("导入", accent, isDark) { showImport = true }
-                        ToolChip("评级", accent, isDark) { showRatings = true }
-                    }
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(4.dp))
                 }
             }
 
-            grouped.forEach { (rating, list) ->
-                item(key = "row-${rating.id}", span = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan.FullLine) {
-                    TierRow(
+            rows.forEach { (rating, list) ->
+                item(key = "row-${rating.id}", span = StaggeredGridItemSpan.FullLine) {
+                    TierLabel(
                         rating = rating,
-                        songs = list,
-                        yearFilter = yearFilter,
+                        count = list.size,
                         isDark = isDark,
-                        draggingId = dragging?.id,
-                        dragDelta = dragDelta,
-                        onRowBounds = { rowBounds[rating.id] = it },
-                        onCardBounds = { id, rect -> cardBounds[id] = rect },
-                        onDragStart = { song, from ->
-                            dragging = song
-                            dragFrom = from
-                            dragDelta = Offset.Zero
-                        },
-                        onDrag = { song, amount ->
-                            dragDelta += amount
-                            commitDrag(song)
-                        },
-                        onDragEnd = {
-                            dragging = null
-                            dragDelta = Offset.Zero
-                        },
-                        onCardClick = { editing = it },
+                        compact = compact,
+                        onBounds = { rowBounds[rating.id] = it },
                     )
+                }
+                if (compact) {
+                    items(list, key = { it.id }) { song ->
+                        CompactSongCard(
+                            song = song,
+                            rank = list.indexOf(song) + 1,
+                            ratingColor = Color(rating.color),
+                            isDark = isDark,
+                            isDragging = dragging?.id == song.id,
+                            dragDelta = if (dragging?.id == song.id) dragDelta else Offset.Zero,
+                            onBounds = { cardBounds[song.id] = it },
+                            onDragStart = { from ->
+                                dragging = song
+                                dragFrom = from
+                                dragDelta = Offset.Zero
+                            },
+                            onDrag = { amount ->
+                                dragDelta += amount
+                                commitDrag(song)
+                            },
+                            onDragEnd = {
+                                dragging = null
+                                dragDelta = Offset.Zero
+                            },
+                            onClick = { editing = song },
+                        )
+                    }
+                } else {
+                    item(key = "band-${rating.id}", span = StaggeredGridItemSpan.FullLine) {
+                        TierBand(
+                            songs = list,
+                            ratingColor = Color(rating.color),
+                            yearFilter = yearFilter,
+                            isDark = isDark,
+                            draggingId = dragging?.id,
+                            dragDelta = dragDelta,
+                            onCardBounds = { id, rect -> cardBounds[id] = rect },
+                            onDragStart = { song, from ->
+                                dragging = song
+                                dragFrom = from
+                                dragDelta = Offset.Zero
+                            },
+                            onDrag = { song, amount ->
+                                dragDelta += amount
+                                commitDrag(song)
+                            },
+                            onDragEnd = {
+                                dragging = null
+                                dragDelta = Offset.Zero
+                            },
+                            onCardClick = { editing = it },
+                        )
+                    }
                 }
             }
 
-            if (unrated.isNotEmpty()) {
-                item(key = "row-unrated", span = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan.FullLine) {
-                    TierRow(
-                        rating = SongRating(name = "未分组", color = 0xFF8E9BAA, orderIndex = Int.MAX_VALUE),
-                        songs = unrated,
-                        yearFilter = yearFilter,
-                        isDark = isDark,
-                        draggingId = dragging?.id,
-                        dragDelta = dragDelta,
-                        onRowBounds = { rowBounds["unrated"] = it },
-                        onCardBounds = { id, rect -> cardBounds[id] = rect },
-                        onDragStart = { song, from ->
-                            dragging = song
-                            dragFrom = from
-                            dragDelta = Offset.Zero
-                        },
-                        onDrag = { song, amount ->
-                            dragDelta += amount
-                            commitDrag(song)
-                        },
-                        onDragEnd = {
-                            dragging = null
-                            dragDelta = Offset.Zero
-                        },
-                        onCardClick = { editing = it },
-                    )
-                }
-            }
-
-            if (grouped.isEmpty() && unrated.isEmpty()) {
-                item(key = "no-rating", span = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan.FullLine) {
+            if (rows.isEmpty()) {
+                item(key = "no-rating", span = StaggeredGridItemSpan.FullLine) {
                     Text(
                         text = "还没有评级，点上面的「评级」加一个",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -352,88 +411,92 @@ fun SongBoardScreen(
     }
 }
 
-/** 一行 = 顶部评级标题条 + 横向大幅曲绘带。 */
+/** 评级标题条：色块 + 档名 + 数量，顺带把这一档的窗口坐标报给拖动逻辑。 */
 @Composable
-private fun TierRow(
+private fun TierLabel(
     rating: SongRating,
+    count: Int,
+    isDark: Boolean,
+    compact: Boolean = false,
+    onBounds: (Rect) -> Unit = {},
+) {
+    val color = Color(rating.color)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .onGloballyPositioned { onBounds(it.boundsInWindow()) }
+            .padding(
+                start = if (compact) 10.dp else 16.dp,
+                end = 16.dp,
+                top = if (compact) 6.dp else 10.dp,
+                bottom = if (compact) 3.dp else 6.dp,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(7.dp))
+                .background(color.copy(alpha = 0.30f))
+                .border(1.dp, color.copy(alpha = 0.65f), RoundedCornerShape(7.dp))
+                .padding(horizontal = 7.dp, vertical = if (compact) 0.dp else 2.dp),
+        ) {
+            Text(
+                text = rating.name,
+                color = if (isDark) lerp(color, Color.White, 0.45f) else lerp(color, Color(0xFF08161E), 0.30f),
+                fontSize = if (compact) 12.sp else 15.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Spacer(Modifier.width(7.dp))
+        Text(
+            text = "$count 首",
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+            fontSize = if (compact) 10.sp else 11.sp,
+        )
+    }
+}
+
+/** 大图模式的一条横向曲绘带。 */
+@Composable
+private fun TierBand(
     songs: List<Song>,
+    ratingColor: Color,
     yearFilter: Int,
     isDark: Boolean,
     draggingId: String?,
     dragDelta: Offset,
-    onRowBounds: (Rect) -> Unit,
     onCardBounds: (String, Rect) -> Unit,
     onDragStart: (Song, Offset) -> Unit,
     onDrag: (Song, Offset) -> Unit,
     onDragEnd: () -> Unit,
     onCardClick: (Song) -> Unit,
 ) {
-    val color = Color(rating.color)
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .onGloballyPositioned { onRowBounds(it.boundsInWindow()) },
+    androidx.compose.foundation.lazy.LazyRow(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // 评级标题条：色块 + 档名 + 数量
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, bottom = 6.dp, top = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(color.copy(alpha = 0.30f))
-                    .border(1.dp, color.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
-            ) {
-                Text(
-                    text = rating.name,
-                    color = if (isDark) lerp(color, Color.White, 0.45f) else lerp(color, Color(0xFF08161E), 0.30f),
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
+        if (songs.isEmpty()) {
+            item(key = "empty") { EmptySlot(ratingColor) }
+        }
+        songs.forEach { song ->
+            item(key = song.id) {
+                SongPosterCard(
+                    song = song,
+                    rank = songs.indexOf(song) + 1,
+                    yearFilter = yearFilter,
+                    ratingColor = ratingColor,
+                    isDark = isDark,
+                    isDragging = draggingId == song.id,
+                    dragDelta = if (draggingId == song.id) dragDelta else Offset.Zero,
+                    onBounds = { onCardBounds(song.id, it) },
+                    onDragStart = { from -> onDragStart(song, from) },
+                    onDrag = { amount -> onDrag(song, amount) },
+                    onDragEnd = onDragEnd,
+                    onClick = { onCardClick(song) },
                 )
             }
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = "${songs.size} 首",
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                fontSize = 11.sp,
-            )
         }
-
-        // 横向曲绘带：大幅竖版海报卡
-        androidx.compose.foundation.lazy.LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            if (songs.isEmpty()) {
-                item(key = "empty-${rating.id}") {
-                    EmptySlot(color)
-                }
-            }
-            songs.forEach { song ->
-                item(key = song.id) {
-                    SongPosterCard(
-                        song = song,
-                        rank = songs.indexOf(song) + 1,
-                        yearFilter = yearFilter,
-                        ratingColor = color,
-                        isDark = isDark,
-                        isDragging = draggingId == song.id,
-                        dragDelta = if (draggingId == song.id) dragDelta else Offset.Zero,
-                        onBounds = { onCardBounds(song.id, it) },
-                        onDragStart = { from -> onDragStart(song, from) },
-                        onDrag = { amount -> onDrag(song, amount) },
-                        onDragEnd = onDragEnd,
-                        onClick = { onCardClick(song) },
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.height(6.dp))
     }
 }
 
@@ -578,7 +641,135 @@ private fun SongPosterCard(
                     fontWeight = FontWeight.Bold,
                 )
             }
+
+            // 有 B 站来源的视频，右上角给个小角标
+            if (song.linkUrl.isNotBlank()) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(7.dp)
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(Color.Black.copy(alpha = 0.42f))
+                        .padding(horizontal = 5.dp, vertical = 2.dp),
+                ) {
+                    Text(
+                        text = if (song.linkLabel.contains("官方")) "B站官方" else "B站",
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontSize = 8.sp,
+                    )
+                }
+            }
         }
+    }
+}
+
+/** 小图模式的一格：方形曲绘 + 一行歌名，一屏能放很多。 */
+@Composable
+private fun CompactSongCard(
+    song: Song,
+    rank: Int,
+    ratingColor: Color,
+    isDark: Boolean,
+    isDragging: Boolean,
+    dragDelta: Offset,
+    onBounds: (Rect) -> Unit,
+    onDragStart: (Offset) -> Unit,
+    onDrag: (Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    onClick: () -> Unit,
+) {
+    var center by remember { mutableStateOf(Offset.Zero) }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .zIndex(if (isDragging) 2f else 0f)
+            .graphicsLayer {
+                translationX = dragDelta.x
+                translationY = dragDelta.y
+                if (isDragging) {
+                    scaleX = 1.05f
+                    scaleY = 1.05f
+                }
+            }
+            .onGloballyPositioned { coords ->
+                onBounds(coords.boundsInWindow())
+                center = coords.boundsInWindow().center
+            }
+            .pointerInput(song.id) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { onDragStart(center) },
+                    onDrag = { change, amount ->
+                        change.consume()
+                        onDrag(amount)
+                    },
+                    onDragEnd = onDragEnd,
+                    onDragCancel = onDragEnd,
+                )
+            }
+            .clickable(onClick = onClick),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(10.dp))
+                .glassPanel(
+                    shape = RoundedCornerShape(10.dp),
+                    isDark = isDark,
+                    accent = ratingColor,
+                    elevation = if (isDragging) 18.dp else 3.dp,
+                    base = if (isDragging) 0.16f else 0.05f,
+                ),
+        ) {
+            if (song.coverPath.isNotBlank()) {
+                CoverImage(path = song.coverPath, modifier = Modifier.fillMaxSize())
+            } else {
+                CoverFallback(title = song.title, color = ratingColor, isDark = isDark)
+            }
+            // 底部只留一条薄暗角，压住名次
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .height(22.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f)),
+                        ),
+                    ),
+            )
+            Text(
+                text = rank.toString().padStart(2, '0'),
+                color = Color.White.copy(alpha = 0.92f),
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 4.dp, bottom = 3.dp),
+            )
+            if (song.linkUrl.isNotBlank()) {
+                Text(
+                    text = if (song.linkLabel.contains("官方")) "官" else "B",
+                    color = Color.White.copy(alpha = 0.9f),
+                    fontSize = 7.sp,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(3.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color.Black.copy(alpha = 0.42f))
+                        .padding(horizontal = 2.5.dp, vertical = 0.5.dp),
+                )
+            }
+        }
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = song.title,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 9.5.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 1.dp),
+        )
     }
 }
 
@@ -613,7 +804,7 @@ private fun CoverFallback(title: String, color: Color, isDark: Boolean) {
         Text(
             text = title.take(1).ifBlank { "曲" },
             color = Color.White.copy(alpha = 0.92f),
-            fontSize = 44.sp,
+            fontSize = 40.sp,
             fontWeight = FontWeight.Bold,
         )
     }
@@ -677,7 +868,8 @@ private fun FilterChip(
 
 /** 小工具胶囊。 */
 @Composable
-private fun ToolChip(label: String, accent: Color, isDark: Boolean, onClick: () -> Unit) {    val shape = CircleShape
+private fun ToolChip(label: String, accent: Color, isDark: Boolean, onClick: () -> Unit) {
+    val shape = CircleShape
     Box(
         modifier = Modifier
             .clip(shape)
@@ -695,7 +887,39 @@ private fun ToolChip(label: String, accent: Color, isDark: Boolean, onClick: () 
     }
 }
 
+/** 密度开关：小图（网格）/ 大图（海报带）。 */
+@Composable
+private fun DensityChip(compact: Boolean, accent: Color, isDark: Boolean, onToggle: () -> Unit) {
+    val shape = CircleShape
+    Row(
+        modifier = Modifier
+            .clip(shape)
+            .background(accent.copy(alpha = if (isDark) 0.16f else 0.14f))
+            .border(1.dp, accent.copy(alpha = 0.42f), shape)
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = if (compact) Icons.Filled.GridView else Icons.Filled.ViewAgenda,
+            contentDescription = if (compact) "切换大图" else "切换小图",
+            tint = if (isDark) lerp(accent, Color.White, 0.35f) else lerp(accent, Color(0xFF08161E), 0.55f),
+            modifier = Modifier.size(14.dp),
+        )
+        Spacer(Modifier.width(4.dp))
+        Text(
+            text = if (compact) "小图" else "大图",
+            color = if (isDark) lerp(accent, Color.White, 0.35f) else lerp(accent, Color(0xFF08161E), 0.55f),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
 private fun formatPlays(plays: Int): String = when {
     plays >= 10000 -> "${plays / 10000}.${(plays % 10000) / 1000} 万"
     else -> "$plays"
 }
+
+private const val UI_PREFS = "vmap_ui"
+private const val KEY_COMPACT = "songs_compact"

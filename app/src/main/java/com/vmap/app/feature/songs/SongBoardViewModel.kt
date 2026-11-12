@@ -39,6 +39,7 @@ class SongBoardViewModel(
         viewModelScope.launch {
             ensureDefaults()
             seedArchive()
+            dedupeSongs()
         }
     }
 
@@ -81,10 +82,15 @@ class SongBoardViewModel(
             val old = byExternal[a.id]
             if (old == null) {
                 incoming.add(a)
-            } else if (
-                old.years != a.years || old.tour != a.tour ||
-                old.perfCount != a.perfCount || old.album != a.album || old.series != a.series
-            ) {
+            } else {
+                // 档案换代时把封面也一起换掉：B 站视频封面优先，没有再退回网易云专辑图。
+                // 只在版本号变化的那一次跑（外层 prefs 门闸），平时启动不会碰用户自己的封面。
+                val asset = a.biliCoverAsset.ifBlank { a.coverAsset }
+                val cover = if (asset.isNotBlank()) {
+                    coverStore.importAsset(asset, old.id, force = true) ?: old.coverPath
+                } else {
+                    old.coverPath
+                }
                 refreshed.add(
                     old.copy(
                         years = a.years,
@@ -92,6 +98,11 @@ class SongBoardViewModel(
                         perfCount = a.perfCount,
                         album = a.album,
                         series = a.series,
+                        coverPath = cover,
+                        linkUrl = a.linkUrl,
+                        linkLabel = a.linkLabel,
+                        linkAuthor = a.linkAuthor,
+                        linkPlay = a.linkPlay,
                     ),
                 )
             }
@@ -114,7 +125,8 @@ class SongBoardViewModel(
             val idx = perTierCount[tier.id] ?: 0
             perTierCount[tier.id] = idx + 1
             val songId = "arc-${a.id}"
-            val cover = coverStore.importAsset(a.coverAsset, songId).orEmpty()
+            // 曲绘优先用 B 站那支视频的封面（官方 > 最高播放 > 非官方），没有再退回网易云专辑图
+            val cover = coverStore.importAsset(a.biliCoverAsset.ifBlank { a.coverAsset }, songId).orEmpty()
             inserted.add(
                 Song(
                     id = songId,
@@ -131,12 +143,99 @@ class SongBoardViewModel(
                     years = a.years,
                     perfCount = a.perfCount,
                     album = a.album,
+                    linkUrl = a.linkUrl,
+                    linkLabel = a.linkLabel,
+                    linkAuthor = a.linkAuthor,
+                    linkPlay = a.linkPlay,
                 ),
             )
         }
         val rows = refreshed + inserted
         if (rows.isNotEmpty()) dao.upsertSongs(rows)
         prefs.edit().putBoolean(KEY_SEEDED, true).apply()
+    }
+
+    /**
+     * 曲库去重：歌名 + 主唱相同的就是同一首歌（网易云不同专辑/不同版本会拆成两条）。
+     *
+     * 保留信息最全的那条（有曲绘 > 出场次数多 > 有 B 站链接），
+     * 年份 / 系列 / 场次取并集，把重复的那几条删掉。每次启动跑一遍，幂等。
+     */
+    private suspend fun dedupeSongs() {
+        val all = dao.observeSongs().first()
+        if (all.size < 2) return
+
+        fun keyOf(s: Song): String = normKey(s.title) + "|" + normKey(s.artist.split(',', '、', '&', '/').first())
+
+        val groups = all.groupBy { keyOf(it) }.filter { it.value.size > 1 }
+        if (groups.isEmpty()) return
+
+        val removed = ArrayList<Song>()
+        val merged = ArrayList<Song>()
+        groups.values.forEach { list ->
+            val keeper = list.maxWithOrNull(
+                compareBy<Song> { if (it.coverPath.isBlank()) 0 else 1 }
+                    .thenBy { it.perfCount }
+                    .thenBy { if (it.linkUrl.isBlank()) 0 else 1 },
+            ) ?: return@forEach
+            val years = list.asSequence()
+                .flatMap { it.years.split(',').asSequence() }
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .sortedBy { it.toIntOrNull() ?: 0 }
+                .joinToString(",")
+            val tours = list.asSequence()
+                .flatMap { it.tour.split(',').asSequence() }
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .joinToString(",")
+            val richest = list.maxByOrNull { it.perfCount } ?: keeper
+            // 链接也按「官方 > 播放最高 > 非官方」挑，不光是有没有链接
+            val bestLink = list.filter { it.linkUrl.isNotBlank() }
+                .maxWithOrNull(
+                    compareBy<Song> { if (it.linkLabel.contains("官方")) 1 else 0 }
+                        .thenBy { it.linkPlay },
+                )
+            merged.add(
+                keeper.copy(
+                    years = years,
+                    tour = tours,
+                    perfCount = richest.perfCount,
+                    album = keeper.album.ifBlank { richest.album },
+                    coverPath = keeper.coverPath,
+                    linkUrl = bestLink?.linkUrl.orEmpty(),
+                    linkLabel = bestLink?.linkLabel.orEmpty(),
+                    linkAuthor = bestLink?.linkAuthor.orEmpty(),
+                    linkPlay = bestLink?.linkPlay ?: 0,
+                ),
+            )
+            list.filter { it.id != keeper.id }.forEach { removed.add(it) }
+        }
+        if (merged.isNotEmpty()) dao.upsertSongs(merged)
+        removed.forEach { dao.deleteSong(it.id) }
+    }
+
+    /** 去重用的归一化：去空白、统一全角括号、刮掉版本后缀（Live / 伴奏 / Remix …）、忽略大小写。 */
+    private fun normKey(raw: String): String {
+        var s = raw
+            .replace('（', '(')
+            .replace('）', ')')
+            .replace('【', '[')
+            .replace('】', ']')
+            .replace("\u3000", " ")
+            .lowercase()
+            .trim()
+        s = s.replace(
+            Regex("\\([^)]{0,24}(live|inst|instrumental|off ?vocal|伴奏|翻自|cover|remix|重置|完整版|官方版|音源|ver\\.?)[^)]{0,14}\\)\\s*$"),
+            "",
+        )
+        s = s.replace(Regex("\\[[^\\]]{0,24}(live|inst|伴奏|翻自|cover|remix|重置|完整版|官方版|音源)[^\\]]{0,14}\\]\\s*$"), "")
+        s = s.replace(Regex("\\s*-\\s*(live|inst|instrumental|伴奏|remix|off ?vocal).*$"), "")
+        s = s.replace(Regex("[\\s\\-_・·.,，。!！?？:：;；'\"“”‘’]"), "")
+        s = s.replace("official", "").replace("公式", "")
+        return s.trim()
     }
 
     fun addRating(name: String, color: Long) {
@@ -287,7 +386,7 @@ class SongBoardViewModel(
     private fun key(title: String, artist: String) = "${title.trim()}|${artist.trim()}".lowercase()
 
     private companion object {
-        const val KEY_SEEDED = "songs_seeded_v3"
+        const val KEY_SEEDED = "songs_seeded_v5"
     }
 
     private fun parseLine(raw: String): Triple<String, String, Int>? {

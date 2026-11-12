@@ -69,18 +69,33 @@ fun MapScreen(
     onLightCity: () -> Unit,
     dimmed: Boolean = false,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val board by viewModel.board.collectAsStateWithLifecycle()
     val spots by viewModel.spots.collectAsStateWithLifecycle()
     val route by viewModel.chronological.collectAsStateWithLifecycle()
+    val myRoute by viewModel.myRoute.collectAsStateWithLifecycle()
     val stats by viewModel.stats.collectAsStateWithLifecycle()
-    val showRoute by viewModel.showRoute.collectAsStateWithLifecycle()
+    val routeMode by viewModel.routeMode.collectAsStateWithLifecycle()
     val isDark by viewModel.isDark.collectAsStateWithLifecycle()
     val tags by viewModel.tags.collectAsStateWithLifecycle()
     val filterTag by viewModel.filterTag.collectAsStateWithLifecycle()
     val yearLayers by viewModel.yearLayers.collectAsStateWithLifecycle()
     val focusYear by viewModel.focusYear.collectAsStateWithLifecycle()
+    val section by viewModel.section.collectAsStateWithLifecycle()
 
     var detailSpot by remember { mutableStateOf<Spot?>(null) }
+    var showTrip by remember { mutableStateOf(false) }
+
+    // 官方路线：档案里开过的场次（不依赖我有没有去），按年份与板块筛
+    val archiveEvents = remember { com.vmap.app.data.archive.ConcertArchive.load(context) }
+    val officialRoute = remember(archiveEvents, board, section, focusYear) {
+        archiveEvents
+            .filter { board == Board.ALL || it.section == section }
+            .filter { focusYear == null || it.year == focusYear }
+            .filter { !it.online && it.adcode.isNotBlank() }
+            .sortedBy { it.performedAt }
+            .map { it.toSpot() }
+    }
 
     // 巡演点亮动画：点某个年份 / 全体就直接播放，不需要再按播放键
     var tourPlaying by remember { mutableStateOf(false) }
@@ -103,10 +118,19 @@ fun MapScreen(
         tourPlaying = true
     }
 
-    // 播放序列：焦点年份按时间正序；未选年份时播放全部（全体）
-    val tourSpots = remember(spots, focusYear) {
-        val base = if (focusYear == null) spots else spots.filter { yearOf(it.performedAt) == focusYear }
-        base.sortedBy { it.performedAt }
+    // 播放序列：默认播官方路线（当年官方开过哪些场）；只有把图层切到「我的线」才播自己的路线。
+    // 两条线在地图上是分开画的，播放不会把「我的路线」盖掉。
+    val tourSpots = remember(spots, myRoute, officialRoute, focusYear, routeMode) {
+        val byYear = { list: List<Spot> ->
+            if (focusYear == null) list else list.filter { yearOf(it.performedAt) == focusYear }
+        }
+        val mine = byYear(myRoute)
+        when {
+            routeMode.showOfficial && officialRoute.isNotEmpty() -> officialRoute
+            routeMode.showMine && mine.isNotEmpty() -> mine
+            officialRoute.isNotEmpty() -> officialRoute
+            else -> byYear(spots)
+        }
     }
 
     // 板块切换时主色和"综合"混合进度都做过渡，地图不会瞬间变色
@@ -132,11 +156,12 @@ fun MapScreen(
         ChinaMapCanvas(
             modifier = Modifier.fillMaxSize(),
             spots = spots,
-            route = route,
+            officialRoute = officialRoute,
+            myRoute = myRoute,
+            routeMode = routeMode,
             accent = accent,
             mixed = board == Board.ALL,
             mixProgress = mixProgress,
-            showRoute = showRoute,
             onSpotClick = { detailSpot = it },
             // 有弹窗盖着时冻结动画，避免后台地图每帧重绘拖慢对话框
             animated = detailSpot == null && !dimmed,
@@ -161,11 +186,12 @@ fun MapScreen(
                 accent = accent,
                 stats = stats,
                 spots = spots,
-                route = route,
+                route = myRoute,
                 onToggleRoute = viewModel::toggleRoute,
+                onOpenTrip = { showTrip = true },
                 onToggleTheme = viewModel::toggleTheme,
                 onToggleYearLayers = viewModel::toggleYearLayers,
-                showRoute = showRoute,
+                routeMode = routeMode,
                 isDark = isDark,
                 yearLayers = yearLayers,
             )
@@ -213,6 +239,14 @@ fun MapScreen(
                 viewModel = viewModel,
             )
         }
+
+        if (showTrip) {
+            com.vmap.app.feature.trip.MyTripSheet(
+                viewModel = viewModel,
+                isDark = isDark,
+                onDismiss = { showTrip = false },
+            )
+        }
     }
 }
 
@@ -224,22 +258,28 @@ private fun SectionSwitchBar(
     spots: List<Spot>,
     route: List<Spot>,
     onToggleRoute: () -> Unit,
+    onOpenTrip: () -> Unit,
     onToggleTheme: () -> Unit,
     onToggleYearLayers: () -> Unit,
-    showRoute: Boolean,
+    routeMode: RouteMode,
     isDark: Boolean,
     yearLayers: Boolean,
 ) {
     val shape = RoundedCornerShape(22.dp)
 
-    // 三种视角：城市/场次 → 累计里程 → 最常去
+    // 三种视角：我的足迹 → 我的里程 → 最常去
     var statPage by remember { mutableIntStateOf(0) }
+    // 第一屏只算「我去过」的：官方档案铺满地图，但那些不算我的足迹
+    val mineSpots = remember(spots) { spots.filter { it.mine } }
+    val mineCityCount = remember(mineSpots) {
+        mineSpots.map { it.adcode }.filter { it.isNotBlank() }.distinct().size
+    }
     val totalKm = remember(route) {
         // 线上活动没有坐标，不参与里程计算
         val stops = route.filter { it.adcode.isNotBlank() }
         stops.zipWithNext().sumOf { (a, b) -> distanceKm(a.lat, a.lng, b.lat, b.lng) }
     }
-    val topCity = remember(spots) { spots.groupBy { it.cityName }.maxByOrNull { it.value.size } }
+    val topCity = remember(mineSpots) { mineSpots.groupBy { it.cityName }.maxByOrNull { it.value.size } }
 
     Row(
         modifier = Modifier
@@ -285,15 +325,15 @@ private fun SectionSwitchBar(
                         }
 
                         else -> {
-                            append("已点亮 ")
+                            append("我去过 ")
                             withStyle(SpanStyle(color = numberColor, fontWeight = FontWeight.Bold, fontSize = 17.sp)) {
-                                append("${stats.cityCount}")
+                                append("$mineCityCount")
                             }
                             append(" 座城市 · ")
                             withStyle(SpanStyle(color = numberColor, fontWeight = FontWeight.Bold, fontSize = 17.sp)) {
-                                append("${stats.spotCount}")
+                                append("${mineSpots.size}")
                             }
-                            append(" 场演出")
+                            append(" 场行程")
                         }
                     }
                 },
@@ -306,28 +346,44 @@ private fun SectionSwitchBar(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // 路线开关：开启时玻璃胶囊里透出应援色
+            // 路线开关：关 → 官方 → 我的 → 双线，四态循环
             Box(
                 modifier = Modifier
                     .clip(CircleShape)
-                    .background(if (showRoute) accent.copy(alpha = 0.20f) else Color.White.copy(alpha = if (isDark) 0.05f else 0.35f))
+                    .background(if (routeMode != RouteMode.OFF) accent.copy(alpha = 0.20f) else Color.White.copy(alpha = if (isDark) 0.05f else 0.35f))
                     .border(
                         width = 1.dp,
-                        color = if (showRoute) accent.copy(alpha = 0.55f) else Color.White.copy(alpha = if (isDark) 0.12f else 0.55f),
+                        color = if (routeMode != RouteMode.OFF) accent.copy(alpha = 0.55f) else Color.White.copy(alpha = if (isDark) 0.12f else 0.55f),
                         shape = CircleShape,
                     )
                     .clickable(onClick = onToggleRoute)
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
             ) {
                 Text(
-                    text = if (showRoute) "路线开" else "路线关",
-                    color = if (showRoute) {
+                    text = shortRouteLabel(routeMode),
+                    color = if (routeMode != RouteMode.OFF) {
                         if (isDark) lerp(accent, Color.White, 0.3f) else lerp(accent, Color(0xFF08161E), 0.58f)
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },
-                    fontSize = 12.sp,
-                    fontWeight = if (showRoute) FontWeight.Medium else FontWeight.Normal,
+                    fontSize = 11.sp,
+                    fontWeight = if (routeMode != RouteMode.OFF) FontWeight.Medium else FontWeight.Normal,
+                )
+            }
+            // 我的行程：快速勾选官方场次 + 记录额外去过的地方
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(accent.copy(alpha = 0.14f))
+                    .border(1.dp, accent.copy(alpha = 0.45f), CircleShape)
+                    .clickable(onClick = onOpenTrip)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Text(
+                    text = "我的路线",
+                    color = if (isDark) lerp(accent, Color.White, 0.3f) else lerp(accent, Color(0xFF08161E), 0.58f),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium,
                 )
             }
             // 年份分层开关：开启后地块按演出年份着色，越早越淡
@@ -387,6 +443,14 @@ private fun yearOf(timestamp: Long): Int {
     return cal.get(java.util.Calendar.YEAR)
 }
 
+/** 路线芯片上的短标签，省位置。 */
+private fun shortRouteLabel(mode: RouteMode): String = when (mode) {
+    RouteMode.OFF -> "路线关"
+    RouteMode.OFFICIAL -> "官方线"
+    RouteMode.MINE -> "我的线"
+    RouteMode.BOTH -> "双线"
+}
+
 /**
  * 年份图例：每个去过的年份一个色点，颜色深浅就是该年在年份范围里的位置（越早越淡）。
  * 点一下只看那一年，再点一下回到全部。
@@ -403,6 +467,11 @@ private fun YearLegendBar(
     if (years.isEmpty()) return
     val minYear = years.first()
     val maxYear = years.last()
+    // 当年官方场次 / 我去过的场次：两条路线分开数，附在年份条末尾
+    val scoped = remember(spots, focusYear) {
+        if (focusYear == null) spots else spots.filter { yearOf(it.performedAt) == focusYear }
+    }
+    val mineCount = remember(scoped) { scoped.count { it.mine } }
 
     Box(
         modifier = Modifier
@@ -495,7 +564,15 @@ private fun YearLegendBar(
                     )
                 }
             }
-            // 提示：点年份即自动播放，不再单独放播放键
+            // 官方 / 我的分开计数，播放的是官方路线，我的路线一直单独画在图上
+            item {
+                Text(
+                    text = "官方 ${scoped.size} 场 · 我的 $mineCount 场",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                    fontSize = 9.sp,
+                    letterSpacing = 0.4.sp,
+                )
+            }
             item {
                 Text(
                     text = "点击即播放",

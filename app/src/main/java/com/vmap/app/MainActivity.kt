@@ -19,6 +19,8 @@ import com.vmap.app.core.ui.THEME_TRANSITION_MS
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,6 +58,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -169,7 +172,7 @@ private fun VMapRoot() {
     LaunchedEffect(Unit) { viewModel.autoImportArchive(context) }
 
     VMapTheme(darkTheme = isDark) {
-        var page by remember { mutableStateOf(Page.MAP) }
+        var page by rememberSaveable { mutableStateOf(Page.MAP) }
         var showLightSheet by remember { mutableStateOf(false) }
         val section by viewModel.section.collectAsStateWithLifecycle()
         val board by viewModel.board.collectAsStateWithLifecycle()
@@ -485,6 +488,8 @@ private fun VMapDrawer(
                     },
                 )
                 .navigationBarsPadding()
+                // 横屏时抽屉高度不够，内容可滚动，不会把后半个菜单切掉
+                .verticalScroll(rememberScrollState())
                 .padding(start = 14.dp, end = 14.dp, top = 16.dp, bottom = 16.dp),
         ) {
         Row(

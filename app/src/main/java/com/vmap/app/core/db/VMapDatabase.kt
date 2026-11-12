@@ -21,7 +21,7 @@ import com.vmap.app.domain.model.Tag
 
 @Database(
     entities = [Spot::class, Photo::class, Tag::class, SpotTag::class, SongRating::class, Song::class],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -83,9 +83,22 @@ abstract class VMapDatabase : RoomDatabase() {
             }
         }
 
+        /** v6 → v7：打卡加「我的行程」标记，歌曲加 B 站链接；只加列。 */
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `spots` ADD COLUMN `mine` INTEGER NOT NULL DEFAULT 0")
+                // 别人手点的（不是 arc- 档案导入的）本来就是我自己的行程
+                db.execSQL("UPDATE `spots` SET `mine` = 1 WHERE `id` NOT LIKE 'arc-%'")
+                db.execSQL("ALTER TABLE `songs` ADD COLUMN `linkUrl` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `songs` ADD COLUMN `linkLabel` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `songs` ADD COLUMN `linkAuthor` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `songs` ADD COLUMN `linkPlay` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun build(context: Context): VMapDatabase =
             Room.databaseBuilder(context, VMapDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 // 兜底：将来再加表时如果忘了写 Migration，宁可清库也别崩
                 .fallbackToDestructiveMigration()
                 .build()

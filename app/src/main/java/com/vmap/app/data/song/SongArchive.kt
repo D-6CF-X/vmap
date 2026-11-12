@@ -14,8 +14,13 @@ data class ArchivedSong(
     val title: String,
     val artist: String,
     val album: String,
-    /** assets 内的曲绘路径，如 arc/123456.jpg。 */
+    /** assets 内的曲绘路径，如 song_covers/123456.jpg（网易云专辑图）。 */
     val coverAsset: String,
+    /**
+     * B 站视频封面（assets 内路径）。按「官方投稿 > 最高播放 > 非官方」挑出来的那支视频，
+     * 有就优先用它当曲绘，与跳转链接是同一个来源。
+     */
+    val biliCoverAsset: String = "",
     /** 板块：TIANYI / MIKU。 */
     val series: String,
     /** 演唱会系列名，如「无限共鸣·纯蓝幻乐」。 */
@@ -24,6 +29,12 @@ data class ArchivedSong(
     val years: String,
     /** 出场次数。 */
     val perfCount: Int,
+    /** B 站视频链接（官方投稿优先，其次播放量最高的一支）。 */
+    val linkUrl: String = "",
+    /** 链接来源标签：B站官方 / B站最高播放 / B站非官方。 */
+    val linkLabel: String = "",
+    val linkAuthor: String = "",
+    val linkPlay: Int = 0,
 )
 
 object SongArchive {
@@ -38,16 +49,22 @@ object SongArchive {
             val id = o.optString("id")
             val title = o.optString("title")
             if (id.isBlank() || title.isBlank()) return@mapNotNull null
+            val bili = o.optJSONObject("bili")
             ArchivedSong(
                 id = id,
                 title = title,
                 artist = o.optString("artist"),
                 album = o.optString("album"),
                 coverAsset = o.optString("cover"),
+                biliCoverAsset = bili?.optString("cover").orEmpty(),
                 series = o.optString("series"),
                 tour = o.optString("tour"),
                 years = o.optString("years"),
                 perfCount = o.optInt("perf", 0),
+                linkUrl = bili?.optString("url").orEmpty(),
+                linkLabel = bili?.optString("label").orEmpty(),
+                linkAuthor = bili?.optString("author").orEmpty(),
+                linkPlay = bili?.optInt("play", 0) ?: 0,
             )
         }
     }.getOrElse { emptyList() }

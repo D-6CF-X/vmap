@@ -109,6 +109,8 @@ object ConcertArchive {
                         online = o.optBoolean("online", false) || o.optString("city") == "线上",
                     )
                 }.sortedByDescending { it.performedAt }
+                    // 同一板块、同一座城、同一天只留一场，避免档案里重复录入
+                    .distinctBy { "${it.section}|${it.adcode.ifBlank { it.city }}|${it.dateLabel}" }
             }.getOrDefault(emptyList())
             cached = list
             return list

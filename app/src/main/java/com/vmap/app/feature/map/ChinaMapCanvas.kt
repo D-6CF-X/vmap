@@ -19,8 +19,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
@@ -101,11 +103,14 @@ private const val DETAIL_ZOOM = 2.2f
 fun ChinaMapCanvas(
     modifier: Modifier,
     spots: List<Spot>,
-    route: List<Spot>,
+    /** 官方路线：历年档案里开过的场次，只铺一条淡线，不点亮。 */
+    officialRoute: List<Spot> = emptyList(),
+    /** 我的路线：我真的去过的地方，亮线 + 唯一的光点。 */
+    myRoute: List<Spot> = emptyList(),
+    routeMode: RouteMode = RouteMode.BOTH,
     accent: Color,
     mixed: Boolean = false,
     mixProgress: Float = 0f,
-    showRoute: Boolean,
     onSpotClick: (Spot) -> Unit,
     animated: Boolean = true,
     isDark: Boolean = true,
@@ -140,12 +145,24 @@ fun ChinaMapCanvas(
     val activeSpots = remember(spots, focusYear) {
         if (focusYear == null) spots else spots.filter { yearOf(it.performedAt) == focusYear }
     }
-    val activeRoute = remember(route, focusYear) {
-        if (focusYear == null) route else route.filter { yearOf(it.performedAt) == focusYear }
+    // 两条线分开算：官方档案路线（淡）和我的路线（亮）
+    val officialStops = remember(officialRoute, focusYear) {
+        officialRoute
+            .filter { it.adcode.isNotBlank() && (focusYear == null || yearOf(it.performedAt) == focusYear) }
+            .sortedBy { it.performedAt }
+    }
+    val myStops = remember(myRoute, focusYear) {
+        myRoute
+            .filter { it.adcode.isNotBlank() && (focusYear == null || yearOf(it.performedAt) == focusYear) }
+            .sortedBy { it.performedAt }
     }
 
     val visitedAdcodes = remember(activeSpots) {
         activeSpots.map { it.adcode }.filter { it.isNotBlank() }.toSet()
+    }
+    /** 我真的去过的城市：地块实色 + 立体城市名。 */
+    val mineAdcodes = remember(activeSpots) {
+        activeSpots.filter { it.mine }.map { it.adcode }.filter { it.isNotBlank() }.toSet()
     }
 
     // 每个城市去过的年份（升序去重），决定地块的年份渐变。线上活动没有城市，排除。
@@ -227,12 +244,12 @@ fun ChinaMapCanvas(
 
         val n = tourSpots.size
         var prevNanos = 0L
-        // 阶段时长（毫秒）。飞行放慢一点，光点走得太快根本看不清轨迹
-        val flyMs = 1500L
-        val burstMs = 800L
-        val flashMs = 450L
-        val onlineMs = 1700L
-        val rippleMs = 1900L
+        // 阶段时长（毫秒）。飞行再放慢一档：2.6s 还是有点赶，3.8s 才看得出它在往哪飞、也来得及读日期
+        val flyMs = 3800L
+        val burstMs = 900L
+        val flashMs = 520L
+        val onlineMs = 2000L
+        val rippleMs = 2200L
 
         fun playTone(step: Int) {
             // 钢琴音，逐城上行：第一座城 C4，往后一个个音往上爬
@@ -299,12 +316,12 @@ fun ChinaMapCanvas(
     }
 
     // 动画时钟。animated=false 时不读动画值，Canvas 不会被每帧失效。
-    // 整条路线走一趟 5.2s，慢一点才看得出光点在往哪走。
+    // 静态路线走一趟 15s：光点慢慢挪，才看得出它顺着哪条线走
     val animatedFlow = rememberInfiniteTransition(label = "map").animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(5200, easing = LinearEasing),
+            animation = tween(15000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
         label = "flow",
@@ -379,6 +396,10 @@ fun ChinaMapCanvas(
         }
     }
 
+    // 日期标签的排版缓存（播放时每帧都要画，不能每帧重新 measure）
+    val dateLayouts = remember { HashMap<String, TextLayoutResult>() }
+    val dateFormat = remember { java.text.SimpleDateFormat("yyyy.MM.dd", java.util.Locale.getDefault()) }
+
     fun spotVirtual(spot: Spot): Offset = Offset(
         ChinaMapData.lngToX(spot.point.asWgs84().lng),
         ChinaMapData.latToY(spot.point.asWgs84().lat),
@@ -433,13 +454,56 @@ fun ChinaMapCanvas(
 
         fun toScreen(vx: Float, vy: Float) = Offset(vx * k + dx, vy * k + dy)
 
+        fun dateLabelOf(spot: Spot): String = dateFormat.format(java.util.Date(spot.performedAt))
+
+        /**
+         * 日期小药丸：播放路线时标在光点 / 到站城市旁边，一眼看出这一站是哪天。
+         * 深色底 + 细描边，白天夜里都读得清，不去抢城市名的风头。
+         */
+        fun drawDatePill(label: String, at: Offset, color: Color, alpha: Float) {
+            if (alpha <= 0.02f) return
+            val layout = dateLayouts.getOrPut(label) {
+                textMeasurer.measure(
+                    AnnotatedString(label),
+                    style = TextStyle(fontSize = 8.5.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.2.sp),
+                    constraints = Constraints(maxWidth = 160),
+                )
+            }
+            val tw = layout.size.width.toFloat()
+            val th = layout.size.height.toFloat()
+            val padX = 5.5f
+            val padY = 2.5f
+            val w = tw + padX * 2
+            val h = th + padY * 2
+            var x = at.x - w / 2f
+            var y = at.y - h - 6f
+            if (y < 4f) y = at.y + 8f
+            x = x.coerceIn(3f, (size.width - w - 3f).coerceAtLeast(3f))
+            y = y.coerceIn(3f, (size.height - h - 3f).coerceAtLeast(3f))
+            drawRoundRect(
+                color = Color(0xFF0A1218).copy(alpha = 0.72f * alpha),
+                topLeft = Offset(x, y),
+                size = Size(w, h),
+                cornerRadius = CornerRadius(h / 2f, h / 2f),
+            )
+            drawRoundRect(
+                color = color.copy(alpha = 0.55f * alpha),
+                topLeft = Offset(x, y),
+                size = Size(w, h),
+                cornerRadius = CornerRadius(h / 2f, h / 2f),
+                style = Stroke(width = 1f),
+            )
+            drawText(layout, color = Color.White.copy(alpha = alpha), topLeft = Offset(x + padX, y + padY))
+        }
+
         // 背景
         drawRect(palette.background)
 
         // 巡演播放时，点亮集合由动画进度决定（已完成 burst 的城市才点亮），路线也只画已走过的段
         val isTouring = tourPlaying && tourSpots.isNotEmpty()
         val litAdcodesNow: Set<String> = if (isTouring) {
-            tourSpots.take(tourLitCount).map { it.adcode }.filter { it.isNotBlank() }.toSet()
+            // 我的足迹始终保持点亮，播放官方路线时只有「走到哪亮到哪」的那部分在变
+            tourSpots.take(tourLitCount).map { it.adcode }.filter { it.isNotBlank() }.toSet() + mineAdcodes
         } else {
             visitedAdcodes
         }
@@ -461,6 +525,8 @@ fun ChinaMapCanvas(
 
         provinces.forEach { p ->
             val visited = litAdcodesNow.contains(p.adcode)
+            // 官方档案点亮的地方只铺一层淡色（官方来过），我自己去过的才是实色
+            val isMine = mineAdcodes.contains(p.adcode)
             val cityColor = if (visited) cityAccent(p.adcode) else palette.unlitCity
             val years = cityYears[p.adcode].orEmpty()
             // 综合模式下，两板块都去过的城市从蓝渐变到绿（斜向，像一块双色亚克力）
@@ -480,6 +546,13 @@ fun ChinaMapCanvas(
             }) {
                 when {
                     !visited -> drawPath(p.path, color = palette.unlitCity)
+
+                    // 官方场次（我没去）：淡一层，和我的实色区分开
+                    !isMine -> drawPath(
+                        p.path,
+                        color = yearTint(cityColor, years.lastOrNull()?.let { yearStrength(it) } ?: 1f)
+                            .copy(alpha = if (yearLayers) 0.20f else 0.30f),
+                    )
 
                     // 年份模式：地块用「最近一年」的浓度上色，历史年份的深浅交给城市上方的年份刻度点
                     yearLayers && gradBrush == null -> drawPath(
@@ -503,8 +576,8 @@ fun ChinaMapCanvas(
                     // 亮边：点亮地块像一块有厚度的亚克力，而不是扁平色块
                     drawPath(
                         p.path,
-                        color = litEdge(cityColor).copy(alpha = 0.55f),
-                        style = Stroke(width = 1.1f / k),
+                        color = litEdge(cityColor).copy(alpha = if (isMine) 0.55f else 0.22f),
+                        style = Stroke(width = (if (isMine) 1.1f else 0.8f) / k),
                     )
                 }
                 if (p.adcode == selectedAdcode) {
@@ -714,7 +787,7 @@ fun ChinaMapCanvas(
             offset = Offset(0f, 1.5f),
             blurRadius = 4f,
         )
-        provinces.filter { litAdcodesNow.contains(it.adcode) }
+        provinces.filter { mineAdcodes.contains(it.adcode) }
             .sortedByDescending { it.bounds.width * it.bounds.height }
             .forEach { p ->
                 val layout = litLabelLayouts[p.adcode] ?: return@forEach
@@ -747,7 +820,7 @@ fun ChinaMapCanvas(
         val cityLimit = (28 + scale * 22f).toInt().coerceIn(32, 110)
         val cityLayout = if (scale < DETAIL_ZOOM) smallCityLayouts else labelLayouts
         val cityMinRatio = if (scale < DETAIL_ZOOM) 1.0f else 1.7f
-        provinces.filter { !litAdcodesNow.contains(it.adcode) }
+        provinces.filter { !mineAdcodes.contains(it.adcode) }
             .sortedByDescending { it.bounds.width * it.bounds.height }
             .take(cityLimit)
             .forEach { p ->
@@ -766,16 +839,13 @@ fun ChinaMapCanvas(
                 }
         }
 
-        // 路线：3D 抛物线（向上拱、中间粗亮两端细淡、地面投影、飞行光点拖尾）
-        // 巡演播放时默认路线不画，改由下面的动画绘制「已走过的段」
+        // ===== 路线：官方档案（淡、细）与我的路线（亮、粗、唯一光点）=====
         // 线上活动没有坐标，连线时跳过，避免连到 (0,0)
-        val routeStops = activeRoute.filter { it.adcode.isNotBlank() }
-        if (showRoute && !isTouring && routeStops.size >= 2) {
-            // 先把每一段的几何算出来：画线要用，下面「单个光点巡游整条路线」也要用
-            val segs = ArrayList<RouteSeg>(routeStops.size - 1)
-            for (i in 0 until routeStops.size - 1) {
-                val from = routeStops[i]
-                val to = routeStops[i + 1]
+        fun buildSegs(stops: List<Spot>): List<RouteSeg> {
+            val segs = ArrayList<RouteSeg>(maxOf(0, stops.size - 1))
+            for (i in 0 until stops.size - 1) {
+                val from = stops[i]
+                val to = stops[i + 1]
                 val a = toScreen(spotVirtual(from).x, spotVirtual(from).y)
                 val b = toScreen(spotVirtual(to).x, spotVirtual(to).y)
                 val ddx = b.x - a.x
@@ -795,7 +865,42 @@ fun ChinaMapCanvas(
                     RouteSeg(a, ctrl, b, cityColors(from.adcode).first, cityColors(to.adcode).second, len),
                 )
             }
+            return segs
+        }
 
+        // 官方路线：细而淡的虚线拱线 + 每个场次一个空心点，只交代「官方这一年开过哪些场」。
+        // 播放动画时也保留，和我自己的路线叠在一起，一眼能分清哪条是官方、哪条是我走的。
+        if (routeMode.showOfficial && officialStops.size >= 2) {
+            buildSegs(officialStops).forEach { s ->
+                drawLine(s.c1.copy(alpha = 0.08f), s.a, s.b, strokeWidth = 1f, cap = StrokeCap.Round)
+                val segments = 30
+                for (i in 0 until segments) {
+                    // 间隔绘制 → 虚线，和我的实线区分
+                    if (i % 3 == 2) continue
+                    val t0 = i / segments.toFloat()
+                    val t1 = (i + 1) / segments.toFloat()
+                    val p0 = quadPoint(s.a, s.ctrl, s.b, t0)
+                    val p1 = quadPoint(s.a, s.ctrl, s.b, t1)
+                    val tm = (t0 + t1) / 2
+                    val lift = 1f - kotlin.math.abs(tm - 0.5f) * 2f
+                    drawLine(
+                        lerp(s.c1, s.c2, tm).copy(alpha = 0.10f + 0.22f * lift),
+                        p0,
+                        p1,
+                        strokeWidth = 0.8f + 1.2f * lift,
+                        cap = StrokeCap.Butt,
+                    )
+                }
+            }
+            officialStops.forEach { stop ->
+                val c = toScreen(spotVirtual(stop).x, spotVirtual(stop).y)
+                drawCircle(cityColors(stop.adcode).first.copy(alpha = 0.50f), radius = 3.2f, center = c, style = Stroke(width = 1f))
+            }
+        }
+
+        // 我的路线：亮实线 + 场次日期（一直是实线，播放官方路线时也留在图上）
+        if (routeMode.showMine && myStops.size >= 1) {
+            val segs = buildSegs(myStops)
             segs.forEach { s ->
                 drawLine(s.c1.copy(alpha = 0.15f), s.a, s.b, strokeWidth = 1.5f, cap = StrokeCap.Round)
                 val segments = 36
@@ -812,36 +917,44 @@ fun ChinaMapCanvas(
                 }
             }
 
+            // 我的路线每个点标上日期，一眼看出「哪一年哪一天站在这里」
+            myStops.forEach { stop ->
+                val c = toScreen(spotVirtual(stop).x, spotVirtual(stop).y)
+                drawDatePill(dateLabelOf(stop), c, cityColors(stop.adcode).first, 0.92f)
+            }
+
             // 光点只有一个：沿整条路线按航段顺序走过去，不再「每段各一个点一起出发」。
-            // 首尾各留一小段做淡入淡出，循环回到起点时不生硬。
-            val totalLen = segs.sumOf { it.len.toDouble() }.toFloat()
-            if (totalLen > 1f) {
-                val head = flow
-                val alpha = minOf(
-                    (head / 0.07f).coerceIn(0f, 1f),
-                    ((1f - head) / 0.10f).coerceIn(0f, 1f),
-                )
-                if (alpha > 0.01f) {
-                    fun sample(dist: Float): Pair<Offset, Color>? {
-                        var d = dist
-                        for (s in segs) {
-                            if (d <= s.len || s === segs.last()) {
-                                val lt = (d / s.len).coerceIn(0f, 1f)
-                                return quadPoint(s.a, s.ctrl, s.b, lt) to lerp(s.c1, s.c2, lt)
+            // 巡演动画在跑的时候先收起来，避免地图上同时出现两个光点。
+            if (!isTouring) {
+                val totalLen = segs.sumOf { it.len.toDouble() }.toFloat()
+                if (totalLen > 1f) {
+                    val head = flow
+                    val alpha = minOf(
+                        (head / 0.07f).coerceIn(0f, 1f),
+                        ((1f - head) / 0.10f).coerceIn(0f, 1f),
+                    )
+                    if (alpha > 0.01f) {
+                        fun sample(dist: Float): Pair<Offset, Color>? {
+                            var d = dist
+                            for (s in segs) {
+                                if (d <= s.len || s === segs.last()) {
+                                    val lt = (d / s.len).coerceIn(0f, 1f)
+                                    return quadPoint(s.a, s.ctrl, s.b, lt) to lerp(s.c1, s.c2, lt)
+                                }
+                                d -= s.len
                             }
-                            d -= s.len
+                            return null
                         }
-                        return null
-                    }
-                    val d0 = head * totalLen
-                    for (k in 1..3) {
-                        val prev = sample(d0 - k * 15f) ?: continue
-                        val fade = (1f - k * 0.26f).coerceAtLeast(0f)
-                        drawCircle(prev.second.copy(alpha = 0.42f * fade * alpha), radius = 4.4f * fade, center = prev.first)
-                    }
-                    sample(d0)?.let { (pos, col) ->
-                        drawCircle(col.copy(alpha = 0.24f * alpha), radius = 9f, center = pos)
-                        drawCircle(Color.White.copy(alpha = 0.95f * alpha), radius = 3.5f, center = pos)
+                        val d0 = head * totalLen
+                        for (k in 1..3) {
+                            val prev = sample(d0 - k * 15f) ?: continue
+                            val fade = (1f - k * 0.26f).coerceAtLeast(0f)
+                            drawCircle(prev.second.copy(alpha = 0.42f * fade * alpha), radius = 4.4f * fade, center = prev.first)
+                        }
+                        sample(d0)?.let { (pos, col) ->
+                            drawCircle(col.copy(alpha = 0.24f * alpha), radius = 9f, center = pos)
+                            drawCircle(Color.White.copy(alpha = 0.95f * alpha), radius = 3.5f, center = pos)
+                        }
                     }
                 }
             }
@@ -868,6 +981,59 @@ fun ChinaMapCanvas(
             }
 
             val phase = tourPhase
+
+            // 1.5) 每一站的日期都留在图上（不只是到站闪一下）：
+            //      走过的站标日期，正在飞的这一站把目标日期提前标出来，回看时能对上是哪天到的。
+            val currentIdx = when (phase) {
+                is TourPhase.Fly -> phase.toIndex
+                is TourPhase.Burst -> phase.index
+                is TourPhase.Flash -> phase.index
+                is TourPhase.Online -> phase.index
+                is TourPhase.Ripple -> (tourSpots.size - 1).coerceAtLeast(0)
+                else -> (tourLitCount - 1).coerceAtLeast(0)
+            }
+            litReal.takeLast(4).forEach { s ->
+                val isLast = s.id == litReal.lastOrNull()?.id
+                drawDatePill(
+                    dateLabelOf(s),
+                    spotPos(s),
+                    cityColors(s.adcode).first,
+                    if (isLast) 0.95f else 0.55f,
+                )
+            }
+
+            // 到站前先把"下一站是哪天"飘在飞行光点上方
+            (phase as? TourPhase.Fly)?.let { fly ->
+                val target = tourSpots.getOrNull(fly.toIndex)
+                if (target != null) {
+                    val headAlpha = minOf(
+                        (fly.t / 0.18f).coerceIn(0f, 1f),
+                        ((1f - fly.t) / 0.20f).coerceIn(0f, 1f),
+                    )
+                    if (headAlpha > 0.05f) {
+                        drawDatePill(
+                            dateLabelOf(target),
+                            spotPos(target),
+                            cityColors(target.adcode).first,
+                            headAlpha * 0.95f,
+                        )
+                    }
+                }
+            }
+
+            // 底部进度条：第几站 / 共几站 + 当前这一场的日期和城市，播放时不用猜走到哪了
+            tourSpots.getOrNull(currentIdx)?.let { s ->
+                val label = buildString {
+                    append(dateLabelOf(s))
+                    append("  ")
+                    append(s.cityName.ifBlank { s.title })
+                    append("  ")
+                    append(currentIdx + 1)
+                    append("/")
+                    append(tourSpots.size)
+                }
+                drawDatePill(label, Offset(size.width / 2f, size.height - 118f), accent, 0.96f)
+            }
 
             // 2) 飞行中的段：拖尾从光点往后逐渐变淡，远处的轨迹沉成已走过段的淡色，
             //    所以不会出现「线一下全亮、到站一下全删」的突兀感。
@@ -1007,6 +1173,13 @@ fun ChinaMapCanvas(
                             style = Stroke(width = (2.5f + 2f * (1f - phase.t)) / k),
                         )
                     }
+                    // 到站后把这一场的日期留在城市旁边
+                    drawDatePill(
+                        dateLabelOf(tourSpots[phase.index]),
+                        spotPos(tourSpots[phase.index]),
+                        cityColors(tourSpots[phase.index].adcode).first,
+                        1f - phase.t * 0.35f,
+                    )
                 }
             }
 

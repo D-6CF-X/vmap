@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.vmap.app.domain.model.Song
 import com.vmap.app.domain.model.SongRating
+import com.vmap.app.feature.web.WebViewerDialog
 import java.io.File
 
 /** 评级可选的颜色，够用就好，不做完整取色器。 */
@@ -88,6 +89,7 @@ fun SongEditDialog(
     }
     var pickedCover by remember(song) { mutableStateOf<Uri?>(null) }
     var removeCover by remember(song) { mutableStateOf(false) }
+    var showLink by remember { mutableStateOf(false) }
 
     val coverPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
@@ -167,6 +169,35 @@ fun SongEditDialog(
                         }
                     }
                 }
+                song?.takeIf { it.linkUrl.isNotBlank() }?.let { s ->
+                    Spacer(Modifier.height(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(accent.copy(alpha = 0.10f))
+                            .border(1.dp, accent.copy(alpha = 0.38f), RoundedCornerShape(12.dp))
+                            .clickable { showLink = true }
+                            .padding(horizontal = 12.dp, vertical = 9.dp),
+                    ) {
+                        Column {
+                            Text(
+                                text = "▶ 在 B 站看这支 · ${s.linkLabel.ifBlank { "B站" }}",
+                                color = accent,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = listOf(
+                                    s.linkAuthor.ifBlank { "未知 UP" },
+                                    if (s.linkPlay > 0) "播放 ${formatLinkPlays(s.linkPlay)}" else "",
+                                ).filter { it.isNotBlank() }.joinToString(" · "),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 10.sp,
+                            )
+                        }
+                    }
+                }
                 Spacer(Modifier.height(14.dp))
                 OutlinedTextField(
                     value = title,
@@ -235,6 +266,23 @@ fun SongEditDialog(
             }
         },
     )
+
+    if (showLink) {
+        val link = song?.linkUrl.orEmpty()
+        if (link.isNotBlank()) {
+            WebViewerDialog(
+                url = link,
+                title = song?.title.orEmpty(),
+                isDark = true,
+                onDismiss = { showLink = false },
+            )
+        }
+    }
+}
+
+private fun formatLinkPlays(plays: Int): String = when {
+    plays >= 10000 -> "${plays / 10000}.${(plays % 10000) / 1000} 万"
+    else -> "$plays"
 }
 
 @Composable

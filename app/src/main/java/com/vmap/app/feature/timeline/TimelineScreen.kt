@@ -69,9 +69,32 @@ fun TimelineScreen(
     val section by viewModel.section.collectAsStateWithLifecycle()
     val accent = section.accent
 
-    val groups = remember(chronological) {
+    // 去重：同一板块、同一座城、同一天就算同一场（档案换过 id / 手点过一次会留两条）。
+    // 保留信息最全的那条：我去过的 > 档案自动导入的 > 标题更完整的；只要有一边标了「去过」就合并成我的。
+    val deduped = remember(chronological) {
+        val day = SimpleDateFormat("yyyyMMdd", Locale.US)
         chronological
+            .groupBy {
+                "${it.section}|${it.adcode.ifBlank { it.cityName }}|${day.format(Date(it.performedAt))}"
+            }
+            .map { (_, list) ->
+                val keeper = list.maxWithOrNull(
+                    compareBy<Spot> { if (it.mine) 1 else 0 }
+                        .thenBy { if (it.id.startsWith("arc-")) 1 else 0 }
+                        .thenBy { it.title.length }
+                        .thenBy { it.updatedAt },
+                ) ?: list.first()
+                keeper.copy(
+                    mine = list.any { it.mine },
+                    detail = keeper.detail.ifBlank { list.firstOrNull { it.detail.isNotBlank() }?.detail.orEmpty() },
+                    venue = keeper.venue.ifBlank { list.firstOrNull { it.venue.isNotBlank() }?.venue.orEmpty() },
+                )
+            }
             .sortedByDescending { it.performedAt }
+    }
+
+    val groups = remember(deduped) {
+        deduped
             .groupBy { SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date(it.performedAt)) }
             .map { (key, spots) ->
                 MonthGroup(
@@ -83,13 +106,13 @@ fun TimelineScreen(
             .sortedByDescending { it.key }
     }
 
-    val cityCount = chronological.map { it.adcode }.distinct().size
+    val cityCount = deduped.map { it.adcode }.distinct().size
 
     // 删除要二次确认：点卡片上的垃圾桶先把这场存进待删，确认后才真的 softDelete
     var pendingDelete by remember { mutableStateOf<Spot?>(null) }
     val scope = rememberCoroutineScope()
 
-    if (chronological.isEmpty()) {
+    if (deduped.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("还没有点亮的城市", color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp)
@@ -112,7 +135,7 @@ fun TimelineScreen(
             Column(modifier = Modifier.padding(top = 96.dp, bottom = 6.dp)) {
                 GradientTitle(text = "时间线", accent = accent, fontSize = 24.sp)
                 Text(
-                    text = "${chronological.size} 场演出 · 走过 $cityCount 座城市",
+                    text = "${deduped.size} 场演出 · 走过 $cityCount 座城市",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp,
                 )
@@ -152,7 +175,16 @@ fun TimelineScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    scope.launch { viewModel.delete(target.id) }
+                    val day = SimpleDateFormat("yyyyMMdd", Locale.US)
+                    val key = "${target.section}|${target.adcode.ifBlank { target.cityName }}|${day.format(Date(target.performedAt))}"
+                    // 连同这一场的重复条目一起删，避免删完还留一条一模一样的
+                    val sameGroup = chronological.filter {
+                        "${it.section}|${it.adcode.ifBlank { it.cityName }}|${day.format(Date(it.performedAt))}" == key
+                    }
+                    scope.launch {
+                        sameGroup.forEach { viewModel.delete(it.id) }
+                        if (sameGroup.isEmpty()) viewModel.delete(target.id)
+                    }
                     pendingDelete = null
                 }) { Text("删除") }
             },
@@ -273,6 +305,23 @@ private fun TimelineCard(
                     letterSpacing = 0.8.sp,
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // 「我的」= 我真的去了；「官方」= 只是档案里开过，用来区分两条路线
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(
+                                if (spot.mine) accent.copy(alpha = 0.20f)
+                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.10f),
+                            )
+                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                    ) {
+                        Text(
+                            text = if (spot.mine) "我的" else "官方",
+                            color = if (spot.mine) accent else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            fontSize = 9.sp,
+                        )
+                    }
+                    Spacer(Modifier.width(6.dp))
                     Text(
                         text = spot.cityName,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

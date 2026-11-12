@@ -222,6 +222,8 @@ fun LightCitySheet(
                                         venue = venue.trim(),
                                         performedAt = performedAt,
                                         note = note.trim(),
+                                        // 自己点亮的城市，天然属于「我的路线」
+                                        mine = true,
                                     )
                                 )
                                 onDismiss()
