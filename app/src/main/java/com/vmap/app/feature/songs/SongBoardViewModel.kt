@@ -449,7 +449,14 @@ class SongBoardViewModel(
         if (title.isBlank() || ratingId.isBlank()) return
         viewModelScope.launch {
             val coverPath = when {
-                coverUri != null -> coverStore.import(coverUri, song.id) ?: song.coverPath
+                coverUri != null -> {
+                    val newPath = coverStore.import(coverUri, song.id) ?: song.coverPath
+                    // 换了新文件（新路径）后清掉旧图文件，避免 covers 目录堆垃圾
+                    if (newPath != song.coverPath && song.coverPath.isNotBlank()) {
+                        coverStore.delete(song.coverPath)
+                    }
+                    newPath
+                }
                 removeCover -> {
                     coverStore.delete(song.coverPath)
                     ""

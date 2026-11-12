@@ -23,7 +23,9 @@ class CoverStore(private val context: Context) {
 
     fun absoluteFile(relativePath: String): File = File(context.filesDir, relativePath)
 
-    /** 把选中的图片压到长边 [MAX_EDGE] 存成 JPEG，返回相对路径；失败返回 null。 */
+    /** 把选中的图片压到长边 [MAX_EDGE] 存成 JPEG，返回相对路径；失败返回 null。
+     *  文件名带时间戳：重选的图每次落到新路径，Coil 的缓存 key 随路径变化自动失效，
+     *  否则覆盖同一个 covers/songId.jpg 时界面会一直显示旧图。 */
     suspend fun import(uri: Uri, songId: String): String? = withContext(Dispatchers.IO) {
         try {
             val bitmap = (if (Build.VERSION.SDK_INT >= 28) {
@@ -31,7 +33,7 @@ class CoverStore(private val context: Context) {
             } else {
                 decodeWithFactory(uri)
             }) ?: return@withContext null
-            val relative = "covers/$songId.jpg"
+            val relative = "covers/$songId-${System.currentTimeMillis()}.jpg"
             val target = absoluteFile(relative)
             target.parentFile?.mkdirs()
             target.outputStream().use { out ->

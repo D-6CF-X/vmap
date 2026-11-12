@@ -425,11 +425,12 @@ fun SongBoardScreen(
                                     dragFrom = from
                                     dragDelta = Offset.Zero
                                 },
-                                onDrag = { song, amount ->
+                                onDrag = { _, amount ->
+                                    // 拖动只跟手，不实时落库——松手才吸附（用户要求的交互）
                                     dragDelta += amount
-                                    commitDrag(song)
                                 },
                                 onDragEnd = {
+                                    dragging?.let { commitDrag(it) }
                                     dragging = null
                                     dragDelta = Offset.Zero
                                 },
@@ -462,11 +463,12 @@ fun SongBoardScreen(
                                 dragFrom = from
                                 dragDelta = Offset.Zero
                             },
-                            onDrag = { song, amount ->
+                            onDrag = { _, amount ->
+                                // 拖动只跟手，不实时落库——松手才吸附（用户要求的交互）
                                 dragDelta += amount
-                                commitDrag(song)
                             },
                             onDragEnd = {
+                                dragging?.let { commitDrag(it) }
                                 dragging = null
                                 dragDelta = Offset.Zero
                             },
