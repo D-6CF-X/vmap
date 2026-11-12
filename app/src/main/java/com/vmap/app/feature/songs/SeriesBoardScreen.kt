@@ -138,7 +138,7 @@ fun SeriesBoardScreen(
     val archive = remember(context) { SongArchive.load(context) }
     val archiveItems = remember(archive) {
         archive.map { a ->
-            val cover = a.biliCoverAsset.ifBlank { a.coverAsset }
+            val cover = a.coverAsset.ifBlank { a.biliCoverAsset }
             SeriesItem(
                 id = "arc-${a.id}",
                 title = a.title,

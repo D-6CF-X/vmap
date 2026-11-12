@@ -90,6 +90,7 @@ class SongBoardViewModel(
             prefs.edit()
                 .putBoolean(KEY_RATINGS_V2, true)
                 .putBoolean(KEY_RATINGS_V3, true)
+                .putBoolean(KEY_RATINGS_V4, true)
                 .apply()
             return
         }
@@ -109,6 +110,14 @@ class SongBoardViewModel(
                 }
                 prefs.edit().putBoolean(KEY_RATINGS_V3, true).apply()
             }
+            // v4：第四档「香」→「赞」，用户最终确认叫「赞」，只改这一个名字
+            if (!prefs.getBoolean(KEY_RATINGS_V4, false)) {
+                val updated = dao.observeRatings().first().map { r ->
+                    if (r.name == "香") r.copy(name = "赞") else r
+                }
+                if (updated.any { it.name == "赞" }) dao.upsertRatings(updated)
+                prefs.edit().putBoolean(KEY_RATINGS_V4, true).apply()
+            }
             return
         }
         val names = existing.map { it.name }
@@ -123,6 +132,7 @@ class SongBoardViewModel(
         }
         prefs.edit().putBoolean(KEY_RATINGS_V2, true).apply()
         prefs.edit().putBoolean(KEY_RATINGS_V3, true).apply()
+        prefs.edit().putBoolean(KEY_RATINGS_V4, true).apply()
     }
 
     /**
@@ -203,9 +213,9 @@ class SongBoardViewModel(
             if (old == null) {
                 incoming.add(a)
             } else {
-                // 档案换代时把封面也一起换掉：B 站视频封面优先，没有再退回网易云专辑图。
+                // 档案换代时把封面也一起换掉：音乐平台（网易云）专辑图优先，没有再退回 B 站视频封面。
                 // 只在版本号变化的那一次跑（外层 prefs 门闸），平时启动不会碰用户自己的封面。
-                val asset = a.biliCoverAsset.ifBlank { a.coverAsset }
+                val asset = a.coverAsset.ifBlank { a.biliCoverAsset }
                 val cover = if (asset.isNotBlank()) {
                     coverStore.importAsset(asset, old.id, force = true) ?: old.coverPath
                 } else {
@@ -245,8 +255,8 @@ class SongBoardViewModel(
             val idx = perTierCount[tier.id] ?: 0
             perTierCount[tier.id] = idx + 1
             val songId = "arc-${a.id}"
-            // 曲绘优先用 B 站那支视频的封面（官方 > 最高播放 > 非官方），没有再退回网易云专辑图
-            val cover = coverStore.importAsset(a.biliCoverAsset.ifBlank { a.coverAsset }, songId).orEmpty()
+            // 曲绘优先用音乐平台（网易云）专辑图，没有再退回 B 站视频封面
+            val cover = coverStore.importAsset(a.coverAsset.ifBlank { a.biliCoverAsset }, songId).orEmpty()
             inserted.add(
                 Song(
                     id = songId,
@@ -508,22 +518,25 @@ class SongBoardViewModel(
     private companion object {
         // v6：B 站视频封面补齐后重新落一次盘。版本号变化那一次会用档案里的封面覆盖一遍
         // （包括之前手动换过的），之后启动不再动。
-        const val KEY_SEEDED = "songs_seeded_v6"
+        const val KEY_SEEDED = "songs_seeded_v7"
 
         /** 默认五档，从高到低。颜色按参考的 tier list 走：红 → 橙 → 黄 → 黄绿 → 绿。 */
         val DEFAULT_RATINGS = listOf(
             SongRating(name = "神", color = 0xFFF5696B, orderIndex = 0),
             SongRating(name = "夯", color = 0xFFF7A24B, orderIndex = 1),
             SongRating(name = "顶", color = 0xFFF3D34D, orderIndex = 2),
-            SongRating(name = "香", color = 0xFFC4DD58, orderIndex = 3),
+            SongRating(name = "赞", color = 0xFFC4DD58, orderIndex = 3),
             SongRating(name = "稳", color = 0xFF8FD36A, orderIndex = 4),
         )
 
-        /** 默认档位是否已经从 S/A/B/C 迁到 神/夯/顶/香/稳。 */
+        /** 默认档位是否已经从 S/A/B/C 迁到 神/夯/顶/赞/稳。 */
         const val KEY_RATINGS_V2 = "ratings_v2"
 
         /** 第四档从「赞」改叫「香」、五档配色换成 tier list 的暖色阶，只跑一次。 */
         const val KEY_RATINGS_V3 = "ratings_v3"
+
+        /** 第四档从「香」改回「赞」，只跑一次（用户最终确认叫「赞」）。 */
+        const val KEY_RATINGS_V4 = "ratings_v4"
     }
 
     private fun parseLine(raw: String): Triple<String, String, Int>? {
