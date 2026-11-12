@@ -14,7 +14,12 @@ data class ArchivedSong(
     val title: String,
     val artist: String,
     val album: String,
-    /** assets 内的曲绘路径，如 song_covers/123456.jpg（网易云专辑图）。 */
+    /**
+     * 曲绘 assets 路径。**已由预处理脚本按优先级选好**：
+     * B 站官方 MV 封面（官方曲绘） > 网易云单曲专辑封面（专属曲绘，通常带歌名） >
+     * B 站最高播放视频封面 > 网易云合集封面（兜底）。
+     * 所以运行时直接用这个字段，不再需要跑「网易云 vs B 站」的取舍逻辑。
+     */
     val coverAsset: String,
     /**
      * B 站视频封面（assets 内路径）。按「官方投稿 > 最高播放 > 非官方」挑出来的那支视频，

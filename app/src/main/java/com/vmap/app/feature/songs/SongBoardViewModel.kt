@@ -518,7 +518,7 @@ class SongBoardViewModel(
     private companion object {
         // v6：B 站视频封面补齐后重新落一次盘。版本号变化那一次会用档案里的封面覆盖一遍
         // （包括之前手动换过的），之后启动不再动。
-        const val KEY_SEEDED = "songs_seeded_v7"
+        const val KEY_SEEDED = "songs_seeded_v8"
 
         /** 默认五档，从高到低。颜色按参考的 tier list 走：红 → 橙 → 黄 → 黄绿 → 绿。 */
         val DEFAULT_RATINGS = listOf(
