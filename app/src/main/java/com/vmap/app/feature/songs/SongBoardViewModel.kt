@@ -41,6 +41,7 @@ class SongBoardViewModel(
             seedArchive()
             repairSeriesData()
             dedupeSongs()
+            dedupeVariants()
         }
     }
 
@@ -122,6 +123,57 @@ class SongBoardViewModel(
         }
         prefs.edit().putBoolean(KEY_RATINGS_V2, true).apply()
         prefs.edit().putBoolean(KEY_RATINGS_V3, true).apply()
+    }
+
+    /**
+     * 第二遍去重：同曲异名的条目。
+     *
+     * 「心印」和「心印 (Step on your heart)」、「Monologue」和「【洛天依X Studio】Monologue」、
+     * 「ジェミニ」和「ジェミニ (feat. 鏡音リン・レン)」都是同一首歌的两个投稿条目，只留纯标题那条。
+     *
+     * 判定很保守：**必须存在一条「纯标题」的版本**才合并。像「黑凤梨(AI)」和「黑凤梨remix」
+     * 两条都带副标题，算不同版本，都不动。
+     */
+    private suspend fun dedupeVariants() {
+        val all = dao.observeSongs().first()
+        if (all.size < 2) return
+
+        val toDelete = ArrayList<String>()
+        all.groupBy { looseTitle(it.title) }
+            .filterValues { it.size > 1 }
+            .values
+            .forEach { list ->
+                val base = looseTitle(list.first().title)
+                // 只有名字就是 base 本身（没带括号副标题）的那条才算「纯版本」
+                val plain = list.filter { looseTitleEquals(it.title, base) }
+                if (plain.isEmpty()) return@forEach
+                val keep = plain.maxByOrNull { it.perfCount } ?: plain.first()
+                list.filter { it.id != keep.id }.forEach { toDelete.add(it.id) }
+            }
+
+        if (toDelete.isEmpty()) return
+        android.util.Log.i("VMapDedupe", "同曲异名删除 ${toDelete.size} 条: $toDelete")
+        toDelete.forEach { dao.deleteSong(it) }
+    }
+
+    /** 去掉括号副标题、空格、首尾符号后的歌名，用来认「同一首歌」。 */
+    private fun looseTitle(t: String): String {
+        var s = t.lowercase()
+        s = Regex("[（(\\[【].*?[）)\\]】]").replace(s, "")
+        s = s.replace(Regex("\\s+"), "")
+        s = s.replace(Regex("^[-·—~]+|[-·—~]+$"), "")
+        return s.trim()
+    }
+
+    /** 原标题是否「就是这个名字」，不带任何副标题。 */
+    private fun looseTitleEquals(raw: String, loose: String): Boolean {
+        val trimmed = raw.trim()
+        if (trimmed.contains('(') || trimmed.contains('（') ||
+            trimmed.contains('[') || trimmed.contains('【')
+        ) {
+            return false
+        }
+        return looseTitle(trimmed) == loose
     }
 
     /**

@@ -41,11 +41,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.vmap.app.core.text.looseSongTitle
 import com.vmap.app.core.text.monthDayOf
 import com.vmap.app.core.text.seriesOfEventName
 import com.vmap.app.core.ui.GradientTitle
 import com.vmap.app.core.ui.glassPanel
 import com.vmap.app.data.archive.ConcertArchive
+import com.vmap.app.data.song.SetlistArchive
 import com.vmap.app.data.song.SongArchive
 import com.vmap.app.feature.web.WebViewerDialog
 import java.io.File
@@ -203,17 +205,29 @@ fun SeriesBoardScreen(
             )
     }
 
-    // 选中某一场之后：只留这个系列，且只留那年唱过的歌
-    val visibleGroups = remember(groups, activeSession) {
+    // 选中这一场如果有节目单（setlists.json），就按当晚曲目和顺序来
+    val activeSetlist = remember(activeSession, context) {
+        val s = activeSession ?: return@remember null
+        SetlistArchive.find(context, s.series, s.city, s.year)
+    }
+
+    // 选中某一场之后：只留这个系列，有节目单按节目单，没有就只留那年唱过的歌
+    val visibleGroups = remember(groups, activeSession, activeSetlist) {
         val session = activeSession ?: return@remember groups
         groups
             .filter { it.name == session.series }
             .map { g ->
-                g.copy(
-                    songs = g.songs.filter { item ->
+                val picked = if (activeSetlist != null) {
+                    val byLoose = g.songs.groupBy { looseSongTitle(it.title) }
+                    activeSetlist.tracks.mapNotNull { track ->
+                        byLoose[looseSongTitle(track)]?.firstOrNull()
+                    }
+                } else {
+                    g.songs.filter { item ->
                         item.years.split(',').any { it.trim().toIntOrNull() == session.year }
-                    },
-                )
+                    }
+                }
+                g.copy(songs = picked)
             }
             .filter { it.songs.isNotEmpty() }
     }
@@ -231,6 +245,9 @@ fun SeriesBoardScreen(
                 Text(
                     text = if (activeSession == null) {
                         "${visibleGroups.size} 个系列 · ${totalSongs} 首 · 点每个系列右边的「场次」可以筛到单场"
+                    } else if (activeSetlist != null) {
+                        "${activeSession!!.series} · ${activeSession!!.chipLabel} · 按现场歌单 " +
+                            "${totalSongs}/${activeSetlist.tracks.size} 首"
                     } else {
                         "${activeSession!!.series} · ${activeSession!!.chipLabel} · ${totalSongs} 首 · 同一轮各站曲目相通"
                     },

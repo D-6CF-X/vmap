@@ -541,6 +541,20 @@ fun ChinaMapCanvas(
     val plainCityProvinces = remember(provincesByArea, touringMine) {
         provincesByArea.filter { !touringMine.contains(it.adcode) }
     }
+    /** 官方点亮、但我没去过的城市：地块是淡色，名字还是要标出来。 */
+    val officialOnlyCityProvinces = remember(provincesByArea, litAdcodesNow, touringMine) {
+        provincesByArea.filter {
+            litAdcodesNow.contains(it.adcode) && !touringMine.contains(it.adcode)
+        }
+    }
+    /** 完全没点亮的城市：缩小态只给省会级，放大后才慢慢放开。 */
+    val unlitCityProvinces = remember(provincesByArea, litAdcodesNow) {
+        provincesByArea.filter { !litAdcodesNow.contains(it.adcode) }
+    }
+    /** 关键城市（直辖市 / 省会首府 / 计划单列市 / 港澳台），全国视图只标这些。 */
+    val keyCityProvinces = remember(provincesByArea) {
+        provincesByArea.filter { isKeyCity(it.adcode) }
+    }
 
     Canvas(
         modifier = modifier
@@ -1038,27 +1052,49 @@ fun ChinaMapCanvas(
                 )
             }
 
-        // 城市名：任何时候都要有，只是大小和数量随缩放变化。
-        // 缩小态用 7.5sp 小字、只画面积较大的城市；放大态换 9sp 并逐步放开数量。
-        // 先画城市名（用户要的城市信息），省名只在缩得很小时补位，撞上城市名就让路。
-        val cityLimit = (28 + scale * 22f).toInt().coerceIn(32, 110)
+        // 城市名分三档，学高德：缩小态只给大城，点亮的地方一定有名字。
+        // 1) 我最先画：我点亮过的城市走上面的立体招牌字，这里不重复。
+        val cityLimit = (10 + scale * 12f).toInt().coerceIn(12, 70)
         val cityLayout = if (scale < DETAIL_ZOOM) smallCityLayouts else labelLayouts
         val cityMinRatio = if (scale < DETAIL_ZOOM) 1.0f else 1.7f
-        plainCityProvinces.take(cityLimit).forEach { p ->
+
+        // 2) 官方点亮、我没去过的城市：地块是淡色，名字用应援色标出来。
+        //    同样放宽 bbox——小城地块装不下字，但「点亮了就要有名字」是硬要求。
+        officialOnlyCityProvinces.forEach { p ->
             val layout = cityLayout[p.adcode] ?: return@forEach
-            tryPlace(layout, p.label, palette.label.copy(alpha = 0.58f), p.bounds, cityMinRatio, shadow = plainShadow)
+            tryPlace(
+                layout,
+                p.label,
+                cityAccent(p.adcode).copy(alpha = 0.85f),
+                p.bounds.inflate(260f),
+                1.0f,
+                shadow = plainShadow,
+            )
         }
 
-        // 缩得很小时，省名作为更大的层级补在空位上
-        if (scale < 1.45f) {
-            provinceLabels
-                .sortedByDescending { provinceBBoxes[it.adcode]?.let { r -> r.width * r.height } ?: 0f }
-                .forEach { label ->
-                    val layout = provinceLayouts[label.name] ?: return@forEach
-                    val bbox = provinceBBoxes[label.adcode] ?: return@forEach
-                    tryPlace(layout, Offset(label.x, label.y), palette.label, bbox, 1.2f, shadow = plainShadow)
-                }
+        // 3) 没点亮的：全国视图只标省会级，放大后才慢慢放开到更多地级市。
+        //    缩小态这几座用大一号的字（9sp），并且放宽地块边界——地级市地块太小，
+        //    死守 bbox 的话 9sp 的字一个都放不进去（城市名本来就可以压在邻块上）。
+        val plainToShow = if (scale < DETAIL_ZOOM) keyCityProvinces else unlitCityProvinces.take(cityLimit)
+        plainToShow.forEach { p ->
+            val shrink = scale < DETAIL_ZOOM
+            val layout = if (shrink) {
+                labelLayouts[p.adcode] ?: smallCityLayouts[p.adcode]
+            } else {
+                cityLayout[p.adcode]
+            } ?: return@forEach
+            tryPlace(
+                layout,
+                p.label,
+                if (shrink) palette.label.copy(alpha = 0.75f) else palette.label.copy(alpha = 0.55f),
+                if (shrink) p.bounds.inflate(400f) else p.bounds,
+                1.0f,
+                shadow = plainShadow,
+            )
         }
+
+        // 省名不再画：全国视图上省名会把城市名挤掉（用户要的是「重要城市」而不是「省份」）。
+        // 放大到能看清地级市之后，更不需要省级文字占位。
 
         // ===== 路线：官方档案（淡、细）与我的路线（亮、粗、唯一光点）=====
         // 线上活动没有坐标，连线时跳过，避免连到 (0,0)
@@ -1626,6 +1662,22 @@ private fun shortCityName(raw: String): String {
  * 二次贝塞尔曲线上的点。航线就是一条干净的抛物线——
  * 之前叠了两条正弦让线"飘"，视觉上一直抖，还每帧多算两次 sin，已经去掉了。
  */
+/**
+ * 是不是「重要城市」：直辖市、省会/首府、计划单列市、港澳台。
+ *
+ * 全国视图只标这些名字，不然 370 个地级市的名字会把地图糊满。
+ */
+private fun isKeyCity(adcode: String): Boolean {
+    if (adcode.length < 6) return false
+    if (adcode == "110000" || adcode == "120000" || adcode == "310000" || adcode == "500000") return true
+    if (adcode.startsWith("81") || adcode.startsWith("82") || adcode.startsWith("71")) return true
+    // 地级市的省会/首府 adcode 都是 xx0100（130100 石家庄、650100 乌鲁木齐…）
+    if (adcode.endsWith("0100")) return true
+    // 计划单列市：深圳、青岛、大连、宁波、厦门
+    return adcode == "440300" || adcode == "370200" || adcode == "210200" ||
+        adcode == "330200" || adcode == "350200"
+}
+
 /**
  * 二次贝塞尔曲线上的点。航线就是一条干净的抛物线——
  * 之前叠了两条正弦让线"飘"，视觉上一直抖，还每帧多算两次 sin，已经去掉了。

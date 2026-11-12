@@ -29,3 +29,16 @@ fun monthDayOf(dateLabel: String): String {
     }
     return dateLabel
 }
+
+/**
+ * 歌名比对用的宽松形式：小写、去掉括号副标题、去掉空格和常见标点。
+ *
+ * 节目单上写「反乌托邦Pt.2」，库里可能是「反乌托邦Pt2」；
+ * 节目单写「黑凤梨」，库里是「黑凤梨(洛天依AI)」——归一化之后才能对上。
+ */
+fun looseSongTitle(t: String): String {
+    var s = t.lowercase()
+    s = Regex("[（(\\[【].*?[）)\\]】]").replace(s, "")
+    s = s.replace(Regex("[\\s\\-·—~.,:;!?、'\"“”‘’]"), "")
+    return s.trim()
+}

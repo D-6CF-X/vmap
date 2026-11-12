@@ -135,11 +135,29 @@ fun SongBoardScreen(
             .sorted()
             .toList()
     }
-    val songs = remember(allSongs, seriesFilter, yearFilter, tourFilter) {
-        allSongs.filter { s ->
+    // 选中某一场时，看看有没有这一场的节目单（setlists.json）
+    val activeSetlist = remember(sessionPick, concertEvents, context) {
+        val e = tourSessions.firstOrNull { it.id == sessionPick }
+            ?: return@remember null
+        com.vmap.app.data.song.SetlistArchive.find(
+            context,
+            e.tour.ifBlank { com.vmap.app.core.text.seriesOfEventName(e.name) },
+            e.city,
+            e.year,
+        )
+    }
+
+    val songs = remember(allSongs, seriesFilter, yearFilter, tourFilter, activeSetlist) {
+        val base = allSongs.filter { s ->
             (seriesFilter.isBlank() || s.series == seriesFilter) &&
                 (yearFilter == 0 || s.years.split(',').any { it.trim() == yearFilter.toString() }) &&
                 (tourFilter.isBlank() || s.tour.split(',').any { it.trim() == tourFilter })
+        }
+        val setlist = activeSetlist ?: return@remember base
+        // 有节目单：按当晚的曲目顺序排，一首曲目对应库里一首歌（同名取登场最多的）
+        val byLoose = base.groupBy { com.vmap.app.core.text.looseSongTitle(it.title) }
+        setlist.tracks.mapNotNull { track ->
+            byLoose[com.vmap.app.core.text.looseSongTitle(track)]?.maxByOrNull { it.perfCount }
         }
     }
     val filtering = seriesFilter.isNotBlank() || yearFilter != 0 || tourFilter.isNotBlank()
@@ -254,11 +272,15 @@ fun SongBoardScreen(
                     Spacer(Modifier.height(2.dp))
                     Text(
                         text = when {
-                            // 选了具体某一站：说清楚这是「这一轮」的曲目，同一轮各站唱的基本一致
+                            // 选了具体某一站：有节目单就按节目单，没有就说明是「这一轮」
                             sessionPick != null -> {
                                 val s = tourSessions.firstOrNull { it.id == sessionPick }
-                                "${s?.city ?: ""} ${s?.let { com.vmap.app.core.text.monthDayOf(it.dateLabel) } ?: ""}" +
-                                    " · ${songs.size} 首 · 同一轮各站曲目相通"
+                                val md = s?.let { com.vmap.app.core.text.monthDayOf(it.dateLabel) } ?: ""
+                                if (activeSetlist != null) {
+                                    "${s?.city ?: ""} $md · 按现场歌单 ${songs.size}/${activeSetlist.tracks.size} 首"
+                                } else {
+                                    "${s?.city ?: ""} $md · ${songs.size} 首 · 同一轮各站曲目相通"
+                                }
                             }
 
                             filtering -> "${songs.size} / ${allSongs.size} 首 · 按演唱会登场次数归档"
