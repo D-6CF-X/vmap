@@ -80,8 +80,8 @@
         "url": "https://www.bilibili.com/video/BV1Ssxo6kEok",
         "author": "爱初音和天依",
         "play": 895,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "4K纯享!2026洛天依巡演现场《绝体绝命》",
         "cover": "song_covers_bili/550059604.jpg"
       }
@@ -202,13 +202,13 @@
       "years": "2025,2026",
       "perf": 13,
       "bili": {
-        "bvid": "BV1YM4m1y7kB",
-        "url": "https://www.bilibili.com/video/BV1YM4m1y7kB",
-        "author": "小高雨了",
-        "play": 601028,
-        "official": false,
-        "label": "B站综合第一",
-        "title": "手书【美中心】《病态主角观》",
+        "bvid": "BV1y7n7z4EEH",
+        "url": "https://www.bilibili.com/video/BV1y7n7z4EEH",
+        "author": "洛天依",
+        "play": 42900,
+        "official": true,
+        "label": "B站官方",
+        "title": "《病态主角观》《武装乙女》【2025洛天依全息演唱会城市限定曲】",
         "cover": "song_covers_bili/2131661254.jpg"
       }
     },
@@ -622,13 +622,13 @@
       "years": "2026",
       "perf": 8,
       "bili": {
-        "bvid": "BV1ri6jY9Eiw",
-        "url": "https://www.bilibili.com/video/BV1ri6jY9Eiw",
-        "author": "哔哩哔哩晚会",
-        "play": 1664315,
-        "official": false,
-        "label": "B站综合第一",
-        "title": "【4K 60帧】双强来袭！王心凌吴克群《大小姐和大少爷的反派生涯》【2024B站跨年晚会单品】",
+        "bvid": "BV1FXuNzRE3n",
+        "url": "https://www.bilibili.com/video/BV1FXuNzRE3n",
+        "author": "洛天依",
+        "play": 1797656,
+        "official": true,
+        "label": "B站官方",
+        "title": "你是叛徒我是什么？是叛徒的挚友 |《大小姐和大少爷的反派生涯》洛天依十三周年生日会",
         "cover": "song_covers_bili/510213198.jpg"
       }
     },
@@ -710,8 +710,8 @@
         "url": "https://www.bilibili.com/video/BV1zV4G6KENG",
         "author": "天依的兵",
         "play": 132,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "蔷薇革命洛天依",
         "cover": "song_covers_bili/32785784.jpg"
       }
@@ -857,8 +857,8 @@
         "url": "https://www.bilibili.com/video/BV1ws411d7uH",
         "author": "洛天依LuoTianYi",
         "play": 38245,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "【洛天依】梦想歌(中文版)",
         "cover": "song_covers_bili/1493525870.jpg"
       }
@@ -878,8 +878,8 @@
         "url": "https://www.bilibili.com/video/BV1ks411z7cU",
         "author": "小天依酱",
         "play": 3789,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "【电钢琴】唱给雅音宫羽",
         "cover": "song_covers_bili/27928000.jpg"
       }
@@ -1004,8 +1004,8 @@
         "url": "https://www.bilibili.com/video/BV1aG4y1Q779",
         "author": "MIKU米库喵",
         "play": 348225,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "【4K60帧】【ODDS&amp;ENDS】 Project DIVA F OP",
         "cover": "song_covers_bili/825298.jpg"
       }
@@ -1088,8 +1088,8 @@
         "url": "https://www.bilibili.com/video/BV16G411u7D2",
         "author": "理科生天依酱",
         "play": 14022,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "【洛天依AI】Step on your heart-心印-（Full Ver.）【理科生天依酱】",
         "cover": "song_covers_bili/29163136.jpg"
       }
@@ -1504,13 +1504,13 @@
       "years": "2025",
       "perf": 5,
       "bili": {
-        "bvid": "BV1YfJJzVEDF",
-        "url": "https://www.bilibili.com/video/BV1YfJJzVEDF",
-        "author": "ChinozoX_X",
-        "play": 5990821,
-        "official": false,
-        "label": "B站综合第一",
-        "title": "【官方投稿】Chinozo「武装乙女」feat.洛天依",
+        "bvid": "BV1y7n7z4EEH",
+        "url": "https://www.bilibili.com/video/BV1y7n7z4EEH",
+        "author": "洛天依",
+        "play": 42900,
+        "official": true,
+        "label": "B站官方",
+        "title": "《病态主角观》《武装乙女》【2025洛天依全息演唱会城市限定曲】",
         "cover": "song_covers_bili/2748721765.jpg"
       }
     },
@@ -1802,8 +1802,8 @@
         "url": "https://www.bilibili.com/video/BV1XQ4y1q7mZ",
         "author": "初音Mi酷",
         "play": 13233,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "初音ミクの激唱",
         "cover": "song_covers_bili/4888319.jpg"
       }
@@ -2138,8 +2138,8 @@
         "url": "https://www.bilibili.com/video/BV1YSm4BDECf",
         "author": "POPPRO初音未来投稿网站",
         "play": 28718,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "【初音未来】Mag1c ⭐",
         "cover": "song_covers_bili/2747497769.jpg"
       }
@@ -2537,8 +2537,8 @@
         "url": "https://www.bilibili.com/video/BV1NU4y167Jt",
         "author": "POPPRO初音未来投稿网站",
         "play": 66205,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "《月西江·春雷》【初音未来V4C五周年】活动第七弹",
         "cover": "song_covers_bili/4884475.jpg"
       }
@@ -2621,8 +2621,8 @@
         "url": "https://www.bilibili.com/video/BV1Ab411F7nu",
         "author": "Miku_Sama",
         "play": 11927,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "【MV】Music Like Magic! feat. Hatsune Miku _ 魔法みたいなミュージック！ fea",
         "cover": "song_covers_bili/1456654556.jpg"
       }
@@ -2936,8 +2936,8 @@
         "url": "https://www.bilibili.com/video/BV1xt4y1S7Qn",
         "author": "Miku_Sama",
         "play": 291143,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "【初音ミク】ダーリンダンス【かいりきベア】",
         "cover": "song_covers_bili/1864338278.jpg"
       }
@@ -3083,8 +3083,8 @@
         "url": "https://www.bilibili.com/video/BV1sa411J7hb",
         "author": "盐水是言和水",
         "play": 90867,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "【洛天依AI】为谁而为【原PV附】",
         "cover": "song_covers_bili/1335760301.jpg"
       }
@@ -3209,8 +3209,8 @@
         "url": "https://www.bilibili.com/video/BV1gt411s72U",
         "author": "Miku_Sama",
         "play": 134856,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "【初音ミク】愛言葉 / 爱言叶【2018】1080p60fps",
         "cover": "song_covers_bili/28152549.jpg"
       }
@@ -3377,8 +3377,8 @@
         "url": "https://www.bilibili.com/video/BV1px41187GS",
         "author": "遥天的MIKU酱",
         "play": 2665,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "【Eclipse】用光棒舞的形式表现《砂の惑星》【WOTA艺/荧光棒舞蹈】【10th初音未来诞生祭】",
         "cover": "song_covers_bili/494858478.jpg"
       }
@@ -3419,8 +3419,8 @@
         "url": "https://www.bilibili.com/video/BV1E4411A7J9",
         "author": "MikuFans_3939",
         "play": 73888,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "「初音ミク」「ryo(supercell) 」积雨云涂鸦 pv HD（積乱雲グラフィティ)",
         "cover": "song_covers_bili/28912457.jpg"
       }
@@ -3650,8 +3650,8 @@
         "url": "https://www.bilibili.com/video/BV1iS421R7Gr",
         "author": "洛天依相关收集站",
         "play": 78950,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "【洛天依原创曲】Connect【洛天依的构成】",
         "cover": "song_covers_bili/28828055.jpg"
       }
@@ -3797,8 +3797,8 @@
         "url": "https://www.bilibili.com/video/BV1Tx411Q7yR",
         "author": "vsinger团队",
         "play": 349602,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "【Vsinger乐正龙牙试听曲】In Your Breath",
         "cover": "song_covers_bili/459139584.jpg"
       }
@@ -4427,8 +4427,8 @@
         "url": "https://www.bilibili.com/video/BV1do4y1U7Sn",
         "author": "唯初音主义者",
         "play": 13795,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "【文物修复】サイハテ / 最终之所【1080P】【初音ミク】",
         "cover": "song_covers_bili/469065431.jpg"
       }
@@ -4469,8 +4469,8 @@
         "url": "https://www.bilibili.com/video/BV1BZ4y1W7ar",
         "author": "谢虾初音工作室",
         "play": 1762,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "( 60 Fps Full )ジェミニ Gemini (双子座)- feat Kagamine Rin&amp;Len鏡",
         "cover": "song_covers_bili/526473106.jpg"
       }
@@ -4785,7 +4785,7 @@
         "author": "没有龟壳的乌龟",
         "play": 18116086,
         "official": false,
-        "label": "B站最高播放",
+        "label": "B站综合第一",
         "title": "【2016拜年祭单品】九九八十一【乐正绫 feat.洛天依】",
         "cover": "song_covers_bili/441622487.jpg"
       }
@@ -4805,8 +4805,8 @@
         "url": "https://www.bilibili.com/video/BV1X34y1W7M8",
         "author": "理科生天依酱",
         "play": 26088,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "【洛天依AI】二人三角【理科生天依酱】",
         "cover": "song_covers_bili/33933173.jpg"
       }
@@ -4932,7 +4932,7 @@
         "author": "",
         "play": 0,
         "official": false,
-        "label": "B站搜索",
+        "label": "B站综合第一",
         "title": "前奏曲 No.15 雨滴"
       }
     },
@@ -5224,8 +5224,8 @@
         "url": "https://www.bilibili.com/video/BV1WwNVemEGJ",
         "author": "洛天依小队",
         "play": 329,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "《心空 feat. HYPER SLASH超级斩》洛天依音乐",
         "cover": "song_covers_bili/2604527602.jpg"
       }
@@ -5288,7 +5288,7 @@
         "author": "",
         "play": 0,
         "official": false,
-        "label": "B站搜索",
+        "label": "B站综合第一",
         "title": "心里有鬼 feat. 绿流海GreenBang"
       }
     },
@@ -5601,8 +5601,8 @@
         "url": "https://www.bilibili.com/video/BV1TW411E7x2",
         "author": "ミクのツインテル",
         "play": 1677,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "【初音ミクシンフォニー2017】桜ノ雨【東京フィルハーモニー交響楽団】",
         "cover": "song_covers_bili/22677426.jpg"
       }
@@ -5622,8 +5622,8 @@
         "url": "https://www.bilibili.com/video/BV18z4y1t7TG",
         "author": "言和",
         "play": 76369,
-        "official": true,
-        "label": "B站官方",
+        "official": false,
+        "label": "B站综合第一",
         "title": "【言和十周年生日会】梦之雨【听 最初的那场雨】",
         "cover": "song_covers_bili/29095492.jpg"
       }
@@ -6043,7 +6043,7 @@
         "author": "账号已注销",
         "play": 2124,
         "official": false,
-        "label": "B站非官方",
+        "label": "B站综合第一",
         "title": "EXIT TUNES - 纺呗 -つむぎうた-",
         "cover": "song_covers_bili/4888617.jpg"
       }
@@ -6106,7 +6106,7 @@
         "author": "雅筑清新",
         "play": 39696,
         "official": false,
-        "label": "B站最高播放",
+        "label": "B站综合第一",
         "title": "舒伯特 音乐瞬间 Schubert Op. 94 D.780 - No. 3 in F minor",
         "cover": "song_covers_bili/33854651.jpg"
       }
@@ -6253,7 +6253,7 @@
         "author": "Abmin7",
         "play": 1491,
         "official": false,
-        "label": "B站非官方",
+        "label": "B站综合第一",
         "title": "贝多芬献给爱丽丝口琴",
         "cover": "song_covers_bili/419485784.jpg"
       }
