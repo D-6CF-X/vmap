@@ -162,11 +162,11 @@ fun SongBoardScreen(
     }
     val filtering = seriesFilter.isNotBlank() || yearFilter != 0 || tourFilter.isNotBlank()
 
-    // 按评级分组，组内按手动顺序；再按评级的 orderIndex 排序（S 在上）
+    // 按评级分组，组内按手动顺序；再按评级的 orderIndex 排序（S 在上）。
+    // 空档也要显示：不然没有曲子的评级档从界面上消失，用户没法把歌拖进去。
     val grouped = remember(ratings, songs) {
         ratings.sortedBy { it.orderIndex }
             .map { r -> r to songs.filter { it.ratingId == r.id }.sortedBy { it.orderIndex } }
-            .filter { (_, list) -> list.isNotEmpty() || !filtering }
     }
     // 未归属任何评级（理论上不该出现）的歌也兜住
     val ratingIds = ratings.map { it.id }.toSet()
@@ -510,6 +510,9 @@ fun SongBoardScreen(
             onDelete = {
                 viewModel.deleteSong(song)
                 editing = null
+            },
+            onPickAltCover = { alt ->
+                viewModel.setCover(song, alt)
             },
         )
     }

@@ -77,6 +77,7 @@ fun SongEditDialog(
         removeCover: Boolean,
     ) -> Unit,
     onDelete: (() -> Unit)?,
+    onPickAltCover: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     var title by remember(song) { mutableStateOf(song?.title.orEmpty()) }
@@ -195,6 +196,36 @@ fun SongEditDialog(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 10.sp,
                             )
+                        }
+                    }
+                }
+                // 候选曲绘：这首歌的其他版本封面，点一下直接换
+                val alts = song?.altCoverAssets?.split(',')
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotBlank() && it != song.coverPath }
+                    .orEmpty()
+                if (alts.isNotEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    Text("候选曲绘 · 点一下快速换", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        alts.forEach { alt ->
+                            Box(
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(accent.copy(alpha = 0.10f))
+                                    .border(1.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                                    .clickable { onPickAltCover(alt) },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                AsyncImage(
+                                    model = File(context.filesDir, alt),
+                                    contentDescription = "候选曲绘",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
                         }
                     }
                 }

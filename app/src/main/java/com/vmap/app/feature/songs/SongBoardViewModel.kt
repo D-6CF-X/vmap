@@ -229,6 +229,7 @@ class SongBoardViewModel(
                         album = a.album,
                         series = a.series,
                         coverPath = cover,
+                        altCoverAssets = altCovers(a, old.id, cover),
                         linkUrl = a.linkUrl,
                         linkLabel = a.linkLabel,
                         linkAuthor = a.linkAuthor,
@@ -268,6 +269,7 @@ class SongBoardViewModel(
                     source = "netease",
                     externalId = a.id,
                     coverPath = cover,
+                    altCoverAssets = altCovers(a, songId, cover),
                     series = a.series,
                     tour = a.tour,
                     years = a.years,
@@ -283,6 +285,30 @@ class SongBoardViewModel(
         val rows = refreshed + inserted
         if (rows.isNotEmpty()) dao.upsertSongs(rows)
         prefs.edit().putBoolean(KEY_SEEDED, true).apply()
+    }
+
+    /**
+     * 候选曲绘：把这首歌的网易云图和 B 站封面都落盘成相对路径，逗号拼起来，
+     * 但不含当前正在用的那张。编辑弹窗里点一下就能快速换成这些候选。
+     * 候选用 songId-altN 命名，避免和主封面 covers/songId.jpg 抢同一个文件。
+     */
+    private suspend fun altCovers(
+        a: com.vmap.app.data.song.ArchivedSong,
+        songId: String,
+        current: String,
+    ): String {
+        val candidates = buildList {
+            if (a.coverAsset.isNotBlank()) add(a.coverAsset)
+            if (a.biliCoverAsset.isNotBlank() && a.biliCoverAsset != a.coverAsset) add(a.biliCoverAsset)
+        }
+        var idx = 1
+        val rels = ArrayList<String>()
+        candidates.forEach { asset ->
+            val rel = coverStore.importAsset(asset, "${songId}-alt${idx}", force = true).orEmpty()
+            idx++
+            if (rel.isNotBlank() && rel != current && rel !in rels) rels.add(rel)
+        }
+        return rels.joinToString(",")
     }
 
     /**
@@ -446,6 +472,18 @@ class SongBoardViewModel(
     /** 卡片上的封面：解码放到 IO 线程，由界面侧 produceState 调。 */
     suspend fun loadCover(coverPath: String): ImageBitmap? = coverStore.load(coverPath)
 
+    /** 快速换成候选封面：把 [altPath] 复制成主封面文件，更新 coverPath。 */
+    fun setCover(song: Song, altPath: String) {
+        if (altPath.isBlank() || altPath == song.coverPath) return
+        viewModelScope.launch {
+            val src = coverStore.absoluteFile(altPath)
+            if (!src.exists()) return@launch
+            // 复制到 covers/songId.jpg 作为主封面
+            val newPath = coverStore.import(android.net.Uri.fromFile(src), song.id) ?: return@launch
+            dao.upsertSong(song.copy(coverPath = newPath))
+        }
+    }
+
     fun deleteSong(song: Song) {
         viewModelScope.launch {
             coverStore.delete(song.coverPath)
@@ -518,7 +556,7 @@ class SongBoardViewModel(
     private companion object {
         // v6：B 站视频封面补齐后重新落一次盘。版本号变化那一次会用档案里的封面覆盖一遍
         // （包括之前手动换过的），之后启动不再动。
-        const val KEY_SEEDED = "songs_seeded_v8"
+        const val KEY_SEEDED = "songs_seeded_v9"
 
         /** 默认五档，从高到低。颜色按参考的 tier list 走：红 → 橙 → 黄 → 黄绿 → 绿。 */
         val DEFAULT_RATINGS = listOf(

@@ -21,7 +21,7 @@ import com.vmap.app.domain.model.Tag
 
 @Database(
     entities = [Spot::class, Photo::class, Tag::class, SpotTag::class, SongRating::class, Song::class],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -96,9 +96,16 @@ abstract class VMapDatabase : RoomDatabase() {
             }
         }
 
+        /** v7 → v8：歌曲加候选曲绘（编辑弹窗快速换封面用）；只加列。 */
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `songs` ADD COLUMN `altCoverAssets` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun build(context: Context): VMapDatabase =
             Room.databaseBuilder(context, VMapDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                 // 兜底：将来再加表时如果忘了写 Migration，宁可清库也别崩
                 .fallbackToDestructiveMigration()
                 .build()

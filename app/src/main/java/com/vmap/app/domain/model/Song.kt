@@ -34,6 +34,8 @@ data class Song(
     val externalId: String = "",
     /** 曲绘 / 封面的相对路径（相对 filesDir），空表示还没上图。 */
     val coverPath: String = "",
+    /** 候选曲绘的相对路径（逗号分隔），编辑弹窗里点一下就能快速换成这张。 */
+    val altCoverAssets: String = "",
     /** 所属板块：TIANYI / MIKU，空表示手动添加、不属于任何演唱会。 */
     val series: String = "",
     /** 演唱会系列名，可能有好几个（同一首歌唱过好几轮），逗号分隔。手动添加的为空。 */
