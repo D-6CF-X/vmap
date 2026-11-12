@@ -537,11 +537,19 @@
       "title": "天星问（2025哔哩哔哩拜年纪单品）",
       "artist": "洛天依",
       "album": "2025哔哩哔哩拜年纪",
-      "cover": "song_covers/2668141354.jpg",
+      "cover": "song_covers_bili/2668141354.jpg",
       "series": "TIANYI",
       "tour": "无限共鸣·纯蓝幻乐",
       "years": "2026",
-      "perf": 8
+      "perf": 8,
+      "bili": {
+        "bvid": "BV1i6ZeBKEtq",
+        "author": "洛天依",
+        "official": true,
+        "label": "B站官方",
+        "title": "“天垂万象唯见千秋百代未央”《天星问》",
+        "play": 189194
+      }
     },
     {
       "id": "3324479423",
