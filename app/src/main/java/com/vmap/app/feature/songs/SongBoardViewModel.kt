@@ -86,11 +86,30 @@ class SongBoardViewModel(
 
         if (existing.isEmpty()) {
             dao.upsertRatings(DEFAULT_RATINGS)
-            prefs.edit().putBoolean(KEY_RATINGS_V2, true).apply()
+            prefs.edit()
+                .putBoolean(KEY_RATINGS_V2, true)
+                .putBoolean(KEY_RATINGS_V3, true)
+                .apply()
             return
         }
 
-        if (prefs.getBoolean(KEY_RATINGS_V2, false)) return
+        if (prefs.getBoolean(KEY_RATINGS_V2, false)) {
+            // v3：第四档「赞」→「香」，五档换成 tier list 的暖色阶（只改颜色和这一个名字）
+            if (!prefs.getBoolean(KEY_RATINGS_V3, false)) {
+                if (existing.size == DEFAULT_RATINGS.size) {
+                    val palette = DEFAULT_RATINGS.map { it.color }
+                    val updated = existing.mapIndexed { i, r ->
+                        r.copy(
+                            name = if (r.name == "赞") "香" else r.name,
+                            color = palette.getOrElse(i) { r.color },
+                        )
+                    }
+                    dao.upsertRatings(updated)
+                }
+                prefs.edit().putBoolean(KEY_RATINGS_V3, true).apply()
+            }
+            return
+        }
         val names = existing.map { it.name }
         if (names == listOf("S", "A", "B", "C")) {
             val renamed = existing.mapIndexed { i, r ->
@@ -102,6 +121,7 @@ class SongBoardViewModel(
             dao.upsertRatings(renamed + fifth)
         }
         prefs.edit().putBoolean(KEY_RATINGS_V2, true).apply()
+        prefs.edit().putBoolean(KEY_RATINGS_V3, true).apply()
     }
 
     /**
@@ -438,17 +458,20 @@ class SongBoardViewModel(
         // （包括之前手动换过的），之后启动不再动。
         const val KEY_SEEDED = "songs_seeded_v6"
 
-        /** 默认五档，从高到低。颜色从金到灰，正好是一条"越往下越低调"的色阶。 */
+        /** 默认五档，从高到低。颜色按参考的 tier list 走：红 → 橙 → 黄 → 黄绿 → 绿。 */
         val DEFAULT_RATINGS = listOf(
-            SongRating(name = "神", color = 0xFFFFC53D, orderIndex = 0),
-            SongRating(name = "夯", color = 0xFFFF7A45, orderIndex = 1),
-            SongRating(name = "顶", color = 0xFF66CCFF, orderIndex = 2),
-            SongRating(name = "赞", color = 0xFF39C5BB, orderIndex = 3),
-            SongRating(name = "稳", color = 0xFF8E9BAA, orderIndex = 4),
+            SongRating(name = "神", color = 0xFFF5696B, orderIndex = 0),
+            SongRating(name = "夯", color = 0xFFF7A24B, orderIndex = 1),
+            SongRating(name = "顶", color = 0xFFF3D34D, orderIndex = 2),
+            SongRating(name = "香", color = 0xFFC4DD58, orderIndex = 3),
+            SongRating(name = "稳", color = 0xFF8FD36A, orderIndex = 4),
         )
 
-        /** 默认档位是否已经从 S/A/B/C 迁到 神/夯/顶/赞/稳。 */
+        /** 默认档位是否已经从 S/A/B/C 迁到 神/夯/顶/香/稳。 */
         const val KEY_RATINGS_V2 = "ratings_v2"
+
+        /** 第四档从「赞」改叫「香」、五档配色换成 tier list 的暖色阶，只跑一次。 */
+        const val KEY_RATINGS_V3 = "ratings_v3"
     }
 
     private fun parseLine(raw: String): Triple<String, String, Int>? {

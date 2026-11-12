@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -32,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -191,7 +193,14 @@ fun SongBoardScreen(
         val cards = cardBounds.filterKeys { it in tierIds }
         if (cards.isEmpty()) return
 
-        val before = cards.count { (_, r) -> r.center.x < center.x }
+        // tier 墙是二维网格：先比行（y 差超过半格算换行），同一行内再比列
+        val before = cards.count { (_, r) ->
+            if (kotlin.math.abs(r.center.y - center.y) > r.height * 0.6f) {
+                r.center.y < center.y
+            } else {
+                r.center.x < center.x
+            }
+        }
         val sameRow = song.ratingId == targetId
         val current = rows.firstOrNull { it.first.id == targetId }
             ?.second?.indexOfFirst { it.id == song.id } ?: -1
@@ -211,16 +220,19 @@ fun SongBoardScreen(
         // 横屏底部不需要留那么多空白（没有悬浮按钮），留 56dp 就够，
         // 空出来的高度全给评级行，卡片才不至于小成一排邮票
         val bottomPad = if (landscape) 56.dp else 112.dp
-        val compactRowH = when {
-            !landscape -> 100.dp
-            headerHeight > 0 -> with(density) {
-                // 屏高扣掉上下留白和 header，剩下的均分给 5 个评级
-                (((maxHeight - topPad - bottomPad).toPx() - headerHeight) / 5f).toDp()
-            }.coerceIn(44.dp, 120.dp)
 
-            else -> 64.dp
+        // tier 墙的格子：按像素算列数（Dp 除法容易差一格），余量摊平成格宽
+        val wallSidePad = 16.dp
+        val wallLeft = 46.dp
+        val wallGap = 2.dp
+        val wallTargetCell = if (landscape) 56.dp else 64.dp
+        val (wallColumns, wallCell) = with(density) {
+            val availPx = maxWidth.toPx() - wallSidePad.toPx() - wallLeft.toPx() - wallGap.toPx()
+            val gapPx = wallGap.toPx()
+            val targetPx = wallTargetCell.toPx()
+            val cols = ((availPx + gapPx) / (targetPx + gapPx)).toInt().coerceIn(4, 20)
+            cols to ((availPx - gapPx * (cols - 1)) / cols).toDp()
         }
-        val compactCard = (compactRowH - 18.dp).coerceIn(30.dp, 82.dp)
 
         LazyVerticalStaggeredGrid(
             columns = StaggeredGridCells.Fixed(1),
@@ -361,33 +373,39 @@ fun SongBoardScreen(
 
             rows.forEach { (rating, list) ->
                 if (compact) {
-                    // 小图：一行就是一个评级——左边评级徽章，右边一条小图横滑。横屏一页正好 5 个评级。
+                    // 小图：tier list 那样一块一块——左边色条，右边封面密排折行
                     item(key = "row-${rating.id}") {
-                        CompactTierRow(
-                            rating = rating,
-                            songs = list,
-                            cardSize = compactCard,
-                            rowHeight = compactRowH,
-                            isDark = isDark,
-                            draggingId = dragging?.id,
-                            dragDelta = dragDelta,
-                            onBounds = { rowBounds[rating.id] = it },
-                            onCardBounds = { id, rect -> cardBounds[id] = rect },
-                            onDragStart = { song, from ->
-                                dragging = song
-                                dragFrom = from
-                                dragDelta = Offset.Zero
-                            },
-                            onDrag = { song, amount ->
-                                dragDelta += amount
-                                commitDrag(song)
-                            },
-                            onDragEnd = {
-                                dragging = null
-                                dragDelta = Offset.Zero
-                            },
-                            onCardClick = { editing = it },
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 1.5.dp),
+                        ) {
+                            TierWallRow(
+                                rating = rating,
+                                songs = list,
+                                cellSize = wallCell,
+                                columns = wallColumns,
+                                isDark = isDark,
+                                draggingId = dragging?.id,
+                                dragDelta = dragDelta,
+                                onBounds = { rowBounds[rating.id] = it },
+                                onCardBounds = { id, rect -> cardBounds[id] = rect },
+                                onDragStart = { song, from ->
+                                    dragging = song
+                                    dragFrom = from
+                                    dragDelta = Offset.Zero
+                                },
+                                onDrag = { song, amount ->
+                                    dragDelta += amount
+                                    commitDrag(song)
+                                },
+                                onDragEnd = {
+                                    dragging = null
+                                    dragDelta = Offset.Zero
+                                },
+                                onCardClick = { editing = it },
+                            )
+                        }
                     }
                 } else {
                     item(key = "row-${rating.id}", span = StaggeredGridItemSpan.FullLine) {
@@ -767,17 +785,18 @@ private fun SongPosterCard(
 }
 
 /**
- * 小图模式的一行：左边一个评级徽章，右边一条横滑的小图。
+ * 小图模式的一个评级块，照 tier list 的样子做的：
+ * 左边一条纯色评级栏（铺满整块高度），右边封面正方形密排、按列折行，不写歌名。
  *
- * 一行只放一个评级，横屏时整行高度 = 屏高/5，一页正好看完 5 个评级；
- * 竖屏时行高固定一点，卡片不至于被拉成巨幅海报。
+ * 这里不用 FlowRow：它按「实际宽度」自己折行，算出来的列数经常差一格。
+ * 直接 chunked(columns) 手动分行，列数由外层按像素算好，所见即所得。
  */
 @Composable
-private fun CompactTierRow(
+private fun TierWallRow(
     rating: SongRating,
     songs: List<Song>,
-    cardSize: Dp,
-    rowHeight: Dp,
+    cellSize: Dp,
+    columns: Int,
     isDark: Boolean,
     draggingId: String?,
     dragDelta: Offset,
@@ -789,68 +808,167 @@ private fun CompactTierRow(
     onCardClick: (Song) -> Unit,
 ) {
     val color = Color(rating.color)
+    val gap = 2.dp
+    val rows = ((songs.size + columns - 1) / columns).coerceAtLeast(1)
+    val blockHeight = cellSize * rows + gap * (rows - 1)
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(rowHeight)
-            .onGloballyPositioned { onBounds(it.boundsInWindow()) }
-            .padding(start = 12.dp, end = 0.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .height(blockHeight)
+            .onGloballyPositioned { onBounds(it.boundsInWindow()) },
     ) {
-        // 评级徽章：竖着立在行首，像唱片架上的一枚标签
-        Column(
+        // 评级栏：整条铺满，字靠近顶部（块很长时居中会跑到屏幕中间去）
+        Box(
             modifier = Modifier
-                .width(40.dp)
-                .height(cardSize + 14.dp)
-                .clip(RoundedCornerShape(9.dp))
-                .background(color.copy(alpha = if (isDark) 0.20f else 0.16f))
-                .border(1.dp, color.copy(alpha = 0.55f), RoundedCornerShape(9.dp)),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .width(46.dp)
+                .fillMaxHeight()
+                .background(color)
+                .padding(top = 16.dp),
+            contentAlignment = Alignment.TopCenter,
         ) {
             Text(
                 text = rating.name,
-                color = if (isDark) lerp(color, Color.White, 0.45f) else lerp(color, Color(0xFF08161E), 0.30f),
-                fontSize = 12.sp,
+                color = Color(0xFF161616),
+                fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = "${songs.size}",
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                fontSize = 8.sp,
             )
         }
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(gap))
 
-        androidx.compose.foundation.lazy.LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(end = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(gap),
         ) {
             if (songs.isEmpty()) {
-                item(key = "empty") { EmptySlot(color, Modifier.size(cardSize)) }
-            }
-            songs.forEach { song ->
-                item(key = song.id) {
-                    CompactSongCard(
-                        song = song,
-                        rank = songs.indexOf(song) + 1,
-                        ratingColor = color,
-                        isDark = isDark,
-                        size = cardSize,
-                        isDragging = draggingId == song.id,
-                        dragDelta = if (draggingId == song.id) dragDelta else Offset.Zero,
-                        onBounds = { onCardBounds(song.id, it) },
-                        onDragStart = { from -> onDragStart(song, from) },
-                        onDrag = { amount -> onDrag(song, amount) },
-                        onDragEnd = onDragEnd,
-                        onClick = { onCardClick(song) },
-                    )
+                Box(
+                    modifier = Modifier
+                        .size(cellSize)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(color.copy(alpha = 0.10f))
+                        .border(1.dp, color.copy(alpha = 0.45f), RoundedCornerShape(3.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("拖到这里", color = color.copy(alpha = 0.85f), fontSize = 8.sp)
                 }
             }
+            songs.chunked(columns).forEach { chunk ->
+                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    chunk.forEach { song ->
+                        key(song.id) {
+                            TierCell(
+                                song = song,
+                                size = cellSize,
+                                ratingColor = color,
+                                isDark = isDark,
+                                isDragging = draggingId == song.id,
+                                dragDelta = if (draggingId == song.id) dragDelta else Offset.Zero,
+                                onBounds = { onCardBounds(song.id, it) },
+                                onDragStart = { from -> onDragStart(song, from) },
+                                onDrag = { amount -> onDrag(song, amount) },
+                                onDragEnd = onDragEnd,
+                                onClick = { onCardClick(song) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** tier list 里的一格：只有方形封面，不放歌名，尽量把信息压成「看图认歌」。 */
+@Composable
+private fun TierCell(
+    song: Song,
+    size: Dp,
+    ratingColor: Color,
+    isDark: Boolean,
+    isDragging: Boolean,
+    dragDelta: Offset,
+    onBounds: (Rect) -> Unit,
+    onDragStart: (Offset) -> Unit,
+    onDrag: (Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    onClick: () -> Unit,
+) {
+    val context = LocalContext.current
+    var center by remember { mutableStateOf(Offset.Zero) }
+    Box(
+        modifier = Modifier
+            .size(size)
+            .graphicsLayer {
+                if (isDragging) {
+                    translationX = dragDelta.x
+                    translationY = dragDelta.y
+                    alpha = 0.86f
+                    scaleX = 1.06f
+                    scaleY = 1.06f
+                }
+            }
+            .zIndex(if (isDragging) 2f else 0f)
+            .clip(RoundedCornerShape(3.dp))
+            .onGloballyPositioned {
+                val b = it.boundsInWindow()
+                onBounds(b)
+                center = b.center
+            }
+            .pointerInput(song.id) {
+                // 长按才拖：短按是打开编辑，直接拖会和列表滚动打架
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { onDragStart(center) },
+                    onDragEnd = { onDragEnd() },
+                    onDragCancel = { onDragEnd() },
+                    onDrag = { change, amount ->
+                        change.consume()
+                        onDrag(amount)
+                    },
+                )
+            }
+            .clickable(onClick = onClick),
+    ) {
+        if (song.coverPath.isNotBlank()) {
+            AsyncImage(
+                model = remember(song.coverPath) { File(context.filesDir, song.coverPath) },
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                ratingColor.copy(alpha = 0.60f),
+                                lerp(ratingColor, Color.Black, 0.55f).copy(alpha = 0.85f),
+                            ),
+                        ),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = song.title.take(1).ifBlank { "曲" },
+                    color = Color.White.copy(alpha = 0.92f),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+        if (song.linkUrl.isNotBlank()) {
+            Text(
+                text = if (song.linkLabel.contains("官方")) "官" else "B",
+                color = Color.White.copy(alpha = 0.92f),
+                fontSize = 6.sp,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(2.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(Color.Black.copy(alpha = 0.42f))
+                    .padding(horizontal = 2.dp, vertical = 0.5.dp),
+            )
         }
     }
 }
