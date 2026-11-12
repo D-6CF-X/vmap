@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -44,14 +43,27 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.vmap.app.core.ui.GradientTitle
 import com.vmap.app.core.ui.glassPanel
-import com.vmap.app.domain.model.Song
+import com.vmap.app.data.song.SongArchive
 import com.vmap.app.feature.web.WebViewerDialog
 import java.io.File
+
+/** 系列里的一首歌：只保留这张页面要用的字段，数据库和内置档案都能转成它。 */
+private data class SeriesItem(
+    val id: String,
+    val title: String,
+    /** 封面模型：File（库里）或 file:///android_asset/…（档案里）。 */
+    val coverModel: Any?,
+    val tour: String,
+    val years: String,
+    val series: String,
+    val linkUrl: String,
+    val linkLabel: String,
+)
 
 /** 一个演唱会系列（同名巡演的多场合并）。 */
 private data class SeriesGroup(
     val name: String,
-    val songs: List<Song>,
+    val songs: List<SeriesItem>,
     val years: List<Int>,
 )
 
@@ -59,10 +71,11 @@ private data class SeriesGroup(
  * 系列歌单：按演唱会系列把曲目重新收一遍。
  *
  * 和「歌曲鉴赏」的分工：鉴赏页是**我的**评级墙（神/夯/顶/赞/稳，能拖能改）；
- * 这里放的是**官方系列**的歌单——同一首歌唱过几轮就出现在几个系列里，
+ * 这里放的是**官方系列**的曲目——同一首歌唱过几轮就出现在几个系列里，
  * 不参与评级，也不能被拖动，纯粹用来「按演出把歌收好」。
  *
- * 曲目数据来自内置档案（网易云曲库 + B 站封面），点开可以直接跳 B 站。
+ * 数据优先用数据库里的歌（带用户自己的封面与信息）；一旦库里没有系列字段
+ * （老版本导入时 `tour` 是空的），直接退回读内置档案，保证页面不会一首都没有。
  */
 @Composable
 fun SeriesBoardScreen(
@@ -70,13 +83,49 @@ fun SeriesBoardScreen(
     isDark: Boolean,
     accent: Color,
 ) {
+    val context = LocalContext.current
     val allSongs by viewModel.songs.collectAsStateWithLifecycle()
     var seriesFilter by remember { mutableStateOf("") }
     var playingUrl by remember { mutableStateOf("") }
 
-    // 按板块筛；再按 tour 字段拆成一个个系列（一首歌可以属于多个系列）
-    val groups = remember(allSongs, seriesFilter) {
-        allSongs
+    // 库里那套（用户的封面、手动改过的字段都在）
+    val dbItems = remember(allSongs, context) {
+        allSongs.map { s ->
+            SeriesItem(
+                id = s.id,
+                title = s.title,
+                coverModel = if (s.coverPath.isNotBlank()) File(context.filesDir, s.coverPath) else null,
+                tour = s.tour,
+                years = s.years,
+                series = s.series,
+                linkUrl = s.linkUrl,
+                linkLabel = s.linkLabel,
+            )
+        }
+    }
+    // 内置档案那套：库里没系列信息时的兜底，封面直接读 assets
+    val archive = remember(context) { SongArchive.load(context) }
+    val archiveItems = remember(archive) {
+        archive.map { a ->
+            val cover = a.biliCoverAsset.ifBlank { a.coverAsset }
+            SeriesItem(
+                id = "arc-${a.id}",
+                title = a.title,
+                coverModel = if (cover.isNotBlank()) "file:///android_asset/$cover" else null,
+                tour = a.tour,
+                years = a.years,
+                series = a.series,
+                linkUrl = a.linkUrl,
+                linkLabel = a.linkLabel,
+            )
+        }
+    }
+
+    // 库里有系列信息就用库，没有就用档案（老数据 tour 为空的情况）
+    val baseItems = if (dbItems.any { it.tour.isNotBlank() }) dbItems else archiveItems
+
+    val groups = remember(baseItems, seriesFilter) {
+        baseItems
             .filter { s -> seriesFilter.isBlank() || s.series == seriesFilter }
             .flatMap { s ->
                 s.tour.split(',')
@@ -146,7 +195,7 @@ fun SeriesBoardScreen(
         if (groups.isEmpty()) {
             item(key = "empty") {
                 Text(
-                    text = "还没有系列曲目——往音簿里的演出导入后，这里会按巡演自动分好",
+                    text = "还没有系列曲目——内置曲库导入完成后会自动出现",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(start = 16.dp, top = 24.dp),
@@ -227,12 +276,11 @@ private fun SeriesSection(
 /** 系列里的一首歌：方形封面 + 歌名，有 B 站来源的右上角一个小角标。 */
 @Composable
 private fun SeriesSongCard(
-    song: Song,
+    song: SeriesItem,
     isDark: Boolean,
     accent: Color,
     onClick: () -> Unit,
 ) {
-    val context = LocalContext.current
     Column(
         modifier = Modifier
             .width(66.dp)
@@ -252,9 +300,10 @@ private fun SeriesSongCard(
                     base = 0.05f,
                 ),
         ) {
-            if (song.coverPath.isNotBlank()) {
+            val model = song.coverModel
+            if (model != null) {
                 AsyncImage(
-                    model = remember(song.coverPath) { File(context.filesDir, song.coverPath) },
+                    model = model,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),

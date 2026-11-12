@@ -14,6 +14,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -34,9 +35,12 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
@@ -233,6 +237,10 @@ fun ChinaMapCanvas(
     var minePhase by remember { mutableStateOf<TourPhase>(TourPhase.Idle) }
     var mineLit by remember { mutableIntStateOf(0) }
 
+    // 换到新系列时弹出来的那条提示（系列名 + 起始时间，画的时候按时间算淡入淡出）
+    var bannerText by remember { mutableStateOf("") }
+    var bannerStart by remember { mutableLongStateOf(0L) }
+
     // 钢琴音源：每点亮一座城弹一个音，逐级升高
     val piano = remember { PianoTone() }
     androidx.compose.runtime.DisposableEffect(Unit) {
@@ -254,13 +262,13 @@ fun ChinaMapCanvas(
         val n = stops.size
         if (n == 0) return
 
-        // 阶段时长（毫秒）。飞行 4s：比原来 5.2s 利落，又不至于看不清往哪飞；
-        // Flash 留 0.9s，是为了让到站后的「城市 + 演出名」有足够时间读完。
-        val flyMs = 4000L
-        val burstMs = 700L
+        // 阶段时长（毫秒）。飞行 2s：一点就走，一年十几场也不会等太久；
+        // Flash 留 0.9s，让到站后的「城市 + 演出名」有时间读完。
+        val flyMs = 2000L
+        val burstMs = 600L
         val flashMs = 900L
-        val onlineMs = 1800L
-        val rippleMs = 1600L
+        val onlineMs = 1500L
+        val rippleMs = 1400L
 
         var prevNanos = 0L
         suspend fun runPhase(durationMs: Long, emit: (Float) -> Unit) {
@@ -283,8 +291,19 @@ fun ChinaMapCanvas(
         var lastRealIndex = -1
         val litCities = HashSet<String>()
         var toneStep = 0
+        var lastSeries = ""
         for (i in 0 until n) {
             val spot = stops[i]
+            // 换系列了（比如从「流光协奏」走到「纯蓝幻乐」）：先弹一下系列名，
+            // 只让官方线弹，我的线播的时候不重复
+            if (withSound) {
+                val series = seriesOfEvent(spot.title)
+                if (series.isNotBlank() && series != lastSeries) {
+                    lastSeries = series
+                    bannerText = series
+                    bannerStart = System.currentTimeMillis()
+                }
+            }
             if (spot.adcode.isBlank()) {
                 runPhase(onlineMs) { t -> setPhase(TourPhase.Online(i, t)) }
                 setLit(i + 1)
@@ -363,24 +382,17 @@ fun ChinaMapCanvas(
         onTourEnd()
     }
 
-    // 静态光点的时钟：故意压到 20fps。
-    // 这块画布一帧要重画 370 个地块 + 上百个城市名，60fps 只为让一个小点挪一格就整屏重绘，
-    // 手机发热、拖动掉帧都从这里来；20fps 肉眼几乎看不出顿，整体顺很多。
+    // 静态光点的时钟：按屏幕刷新率（60fps）走，光点滑得顺。
+    // 分组 / 变换 / 渐变的开销已经在前面砍掉了，直接每帧更新也扛得住。
     var flowTick by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(animated) {
         if (!animated) return@LaunchedEffect
         val periodMs = 22_000L
-        val stepMs = 50L // 20fps
         var startNanos = 0L
-        var lastMs = -stepMs
         while (true) {
             withFrameNanos { now ->
                 if (startNanos == 0L) startNanos = now
-                val elapsed = (now - startNanos) / 1_000_000L
-                if (elapsed - lastMs >= stepMs) {
-                    lastMs = elapsed
-                    flowTick = (elapsed % periodMs).toFloat() / periodMs
-                }
+                flowTick = ((now - startNanos) / 1_000_000L % periodMs).toFloat() / periodMs
             }
         }
     }
@@ -440,6 +452,15 @@ fun ChinaMapCanvas(
             text = AnnotatedString("线上演出"),
             style = TextStyle(fontSize = 9.sp, letterSpacing = 2.sp),
             constraints = Constraints(maxWidth = 200),
+        )
+    }
+    // 换系列提示：系列名排版的缓存 + 上方的「新系列」小标
+    val bannerLayouts = remember { HashMap<String, TextLayoutResult>() }
+    val bannerTagLayout = remember {
+        textMeasurer.measure(
+            text = AnnotatedString("新 系 列"),
+            style = TextStyle(fontSize = 9.sp, letterSpacing = 3.sp),
+            constraints = Constraints(maxWidth = 240),
         )
     }
 
@@ -612,23 +633,23 @@ fun ChinaMapCanvas(
             drawText(layout, color = Color.White.copy(alpha = alpha), topLeft = Offset(x + padX, y + padY))
         }
 
-        /** 演出名去掉「洛天依 / 初音未来」前缀和「· xx站」后缀，标签才不至于横穿半个地图。 */
-        fun shortEventTitle(raw: String, city: String): String {
+        /**
+         * 到站标签里的演出名：保留全名，只去掉和第一行重复的「· xx站」后缀。
+         * 用户要看清这一场到底是什么演出，所以不再压缩成系列名。
+         */
+        fun eventTitleForPill(raw: String, city: String): String {
             var s = raw.trim()
-            s = s.replace(Regex("^(洛天依|初音未来|Hatsune Miku)\\s*"), "")
             if (city.isNotBlank()) {
                 // 注意用 ${city}：$city站 会被 Kotlin 当成变量名 city站
                 s = s.replace("· ${city}站", "").replace("${city}站", "")
             }
-            s = s.trim().trim('·', ' ')
-            return s.ifBlank { raw }
+            return s.trim().trim('·', ' ').ifBlank { raw }
         }
 
         /**
-         * 到站标签：两行——第一行城市 + 日期，第二行演出名。
+         * 到站标签：第一行城市（应援色）+ 日期，第二行演出全称（自动换行）。
          *
-         * 官方路线也要能看出「这一场是什么」，所以不能只标日期；
-         * 演出名太长就省略号截断，卡片宽度跟着最长的那行走。
+         * 框比原来大一圈、字号也放大一点——用户要能直接读出「这是哪一站、哪一场」。
          * [lift] 为负时标签挂在城市下方（两条线同一站时错开用）。
          */
         fun drawEventPill(
@@ -642,67 +663,75 @@ fun ChinaMapCanvas(
             if (alpha <= 0.02f) return
             val city = spot.cityName.ifBlank { if (spot.adcode.isBlank()) "线上" else "—" }
             val date = shortDateFormat.format(java.util.Date(spot.performedAt))
-            val head = if (isMine) "$date  $city" else "$city  $date"
-            // 演出名只挂在官方线上：我的路线是同一场，重复写一遍反而糊住地图
-            val sub = if (isMine) "" else shortEventTitle(spot.title, spot.cityName)
-            val headLayout = dateLayouts.getOrPut("H|$head") {
+            val full = eventTitleForPill(spot.title, spot.cityName)
+
+            // 城市名用应援色、日期用白字，一眼看出是哪一站
+            val headText = buildAnnotatedString {
+                withStyle(SpanStyle(color = color, fontWeight = FontWeight.Bold)) { append(city) }
+                append("   ")
+                withStyle(
+                    SpanStyle(color = Color.White.copy(alpha = 0.82f), fontWeight = FontWeight.Medium),
+                ) { append(date) }
+            }
+            val headLayout = dateLayouts.getOrPut("H2|$city|$date") {
                 textMeasurer.measure(
-                    AnnotatedString(head),
-                    style = TextStyle(fontSize = 9.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.2.sp),
+                    headText,
+                    style = TextStyle(fontSize = 11.sp, letterSpacing = 0.2.sp),
                     maxLines = 1,
-                    constraints = Constraints(maxWidth = 300),
+                    constraints = Constraints(maxWidth = 560),
                 )
             }
-            val subLayout = if (sub.isBlank()) null else dateLayouts.getOrPut("S|$sub") {
+            // 我的线不重复写演出名（同一场），官方线才展开全称
+            val subLayout = if (isMine || full.isBlank()) null else dateLayouts.getOrPut("S2|$full") {
                 textMeasurer.measure(
-                    AnnotatedString(sub),
-                    style = TextStyle(fontSize = 8.sp, fontWeight = FontWeight.Normal),
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    constraints = Constraints(maxWidth = 300),
+                    AnnotatedString(full),
+                    style = TextStyle(fontSize = 9.sp, fontWeight = FontWeight.Normal),
+                    constraints = Constraints(maxWidth = 520),
                 )
             }
-            val padX = 8f
-            val padY = 4f
-            val gap = 1.5f
+            val padX = 10f
+            val padY = 6f
+            val gap = 2f
             val tw = maxOf(headLayout.size.width, subLayout?.size?.width ?: 0).toFloat()
             val th = headLayout.size.height + (subLayout?.let { it.size.height + gap } ?: 0f)
-            val w = tw + padX * 2 + 3f
+            val w = tw + padX * 2
             val h = th + padY * 2
             var x = at.x - w / 2f
-            var y = if (lift >= 0f) at.y - h - 8f - lift else at.y + 9f - lift
-            if (y < 4f) y = at.y + 9f
+            var y = if (lift >= 0f) at.y - h - 9f - lift else at.y + 10f - lift
+            if (y < 4f) y = at.y + 10f
             x = x.coerceIn(3f, (size.width - w - 3f).coerceAtLeast(3f))
             y = y.coerceIn(3f, (size.height - h - 3f).coerceAtLeast(3f))
             drawRoundRect(
-                color = Color(0xFF0A1218).copy(alpha = 0.80f * alpha),
+                color = Color(0xFF0A1218).copy(alpha = 0.86f * alpha),
                 topLeft = Offset(x, y),
                 size = Size(w, h),
-                cornerRadius = CornerRadius(7f, 7f),
+                cornerRadius = CornerRadius(9f, 9f),
             )
             drawRoundRect(
-                color = color.copy(alpha = 0.65f * alpha),
+                color = color.copy(alpha = 0.72f * alpha),
                 topLeft = Offset(x, y),
                 size = Size(w, h),
-                cornerRadius = CornerRadius(7f, 7f),
-                style = Stroke(width = 1f),
+                cornerRadius = CornerRadius(9f, 9f),
+                style = Stroke(width = 1.2f),
             )
             // 左侧应援色竖条：一眼分出这是官方（淡）还是我的（亮）
             drawRect(
-                color = color.copy(alpha = 0.9f * alpha),
-                topLeft = Offset(x + 1.5f, y + 4f),
-                size = Size(2f, h - 8f),
+                color = color.copy(alpha = 0.95f * alpha),
+                topLeft = Offset(x + 1.5f, y + 5f),
+                size = Size(2.5f, h - 10f),
             )
+            // 头部用 span 自带颜色（城市=应援色），只靠 alpha 控制整体淡入淡出
             drawText(
                 headLayout,
-                color = Color.White.copy(alpha = alpha),
-                topLeft = Offset(x + padX + 2f, y + padY),
+                topLeft = Offset(x + padX + 3f, y + padY),
+                alpha = alpha,
             )
             if (subLayout != null) {
                 drawText(
                     subLayout,
-                    color = Color.White.copy(alpha = 0.72f * alpha),
-                    topLeft = Offset(x + padX + 2f, y + padY + headLayout.size.height + gap),
+                    color = Color.White.copy(alpha = 0.80f),
+                    topLeft = Offset(x + padX + 3f, y + padY + headLayout.size.height + gap),
+                    alpha = alpha,
                 )
             }
         }
@@ -1152,6 +1181,68 @@ fun ChinaMapCanvas(
             }
         }
 
+        // ===== 换系列提示：地图上方飘一下系列名，2.4s 自动消失 =====
+        // 播放到新的巡演系列时弹一次，配合到站标签，用户能立刻知道「换系列了」。
+        if (bannerText.isNotBlank()) {
+            val elapsed = System.currentTimeMillis() - bannerStart
+            if (elapsed in 0..2400) {
+                val a = when {
+                    elapsed < 260 -> elapsed / 260f
+                    elapsed > 1900 -> ((2400 - elapsed) / 500f).coerceIn(0f, 1f)
+                    else -> 1f
+                }
+                if (a > 0.01f) {
+                    val layout = bannerLayouts.getOrPut(bannerText) {
+                        textMeasurer.measure(
+                            AnnotatedString(bannerText),
+                            style = TextStyle(fontSize = 19.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp),
+                            constraints = Constraints(maxWidth = 720),
+                        )
+                    }
+                    val tw = layout.size.width.toFloat()
+                    val th = layout.size.height.toFloat()
+                    val cx = size.width / 2f
+                    // 放在顶部两条玻璃栏下面（0.30 屏高），别和年份条打架
+                    val cy = size.height * 0.30f - (1f - a) * 6f
+                    // 背后一条横向渐隐的深色带，把地图压下去，字才立得住
+                    drawRect(
+                        brush = Brush.horizontalGradient(
+                            0f to Color.Transparent,
+                            0.5f to Color(0xFF08161E).copy(alpha = 0.74f * a),
+                            1f to Color.Transparent,
+                        ),
+                        topLeft = Offset(0f, cy - th / 2f - 24f),
+                        size = Size(size.width, th + 48f),
+                    )
+                    val tagLayout = bannerTagLayout
+                    drawText(
+                        tagLayout,
+                        color = accent.copy(alpha = 0.92f * a),
+                        topLeft = Offset(cx - tagLayout.size.width / 2f, cy - th / 2f - tagLayout.size.height - 5f),
+                    )
+                    drawText(
+                        layout,
+                        brush = Brush.horizontalGradient(
+                            listOf(
+                                lerp(accent, Color.White, 0.42f),
+                                accent,
+                                lerp(accent, Color(0xFF08161E), 0.18f),
+                            ),
+                            startX = cx - tw / 2f,
+                            endX = cx + tw / 2f,
+                        ),
+                        topLeft = Offset(cx - tw / 2f, cy - th / 2f),
+                        alpha = a,
+                        shadow = Shadow(
+                            color = accent.copy(alpha = 0.75f * a),
+                            offset = Offset(0f, 0f),
+                            blurRadius = 14f,
+                        ),
+                    )
+                }
+            }
+        }
+
         // ===== 巡演点亮动画绘制：官方线一层、我的线一层，各播各的 =====
         if (isTouring) {
             // 屏幕坐标按城市算（线上活动没有坐标，不参与连线）
@@ -1173,8 +1264,8 @@ fun ChinaMapCanvas(
                 val arcAlpha = if (isMineLine) 0.55f else 0.24f
                 val lineScale = if (isMineLine) 1f else 0.70f
                 val pillWeight = if (isMineLine) 1f else 0.58f
-                // 官方标签挂城市上方、我的挂下方：两条线走到同一站也不会叠在一处
-                val pillLift = if (isMineLine) -6f else 52f
+                // 官方标签挂城市上方（框更高，抬得更多）、我的挂下方：同站也不会叠在一起
+                val pillLift = if (isMineLine) -8f else 74f
 
                 // 1) 已走过的段：只连「已点亮的实体城市」，按时间顺序 1→2、2→3 串起来
                 val litReal = stops.take(litCount).filter { it.adcode.isNotBlank() }
@@ -1540,4 +1631,15 @@ private fun quadPoint(a: Offset, c: Offset, b: Offset, t: Float): Offset {
         u * u * a.x + 2 * u * t * c.x + t * t * b.x,
         u * u * a.y + 2 * u * t * c.y + t * t * b.y,
     )
+}
+
+/**
+ * 从演出名里认「系列」：优先取书名号里的内容
+ * （「洛天依 2026「无限共鸣·纯蓝幻乐」· 上海站」→ 无限共鸣·纯蓝幻乐）；
+ * 没有书名号的（Vsinger Live 2017 全息演唱会）就取「·」前面那一段。
+ */
+private fun seriesOfEvent(title: String): String {
+    val m = Regex("「([^」]{1,24})」").find(title)
+    if (m != null) return m.groupValues[1].trim()
+    return title.substringBefore('·').trim()
 }

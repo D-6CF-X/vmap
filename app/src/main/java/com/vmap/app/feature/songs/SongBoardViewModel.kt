@@ -39,8 +39,39 @@ class SongBoardViewModel(
         viewModelScope.launch {
             ensureDefaults()
             seedArchive()
+            repairSeriesData()
             dedupeSongs()
         }
+    }
+
+    /**
+     * 给系列歌单兜底：把库里「没有系列信息」的歌按 externalId 对回内置档案。
+     *
+     * 老版本导入时可能只写了歌名/歌手/封面，`tour` 是空的，系列歌单页就会一首都没有。
+     * 这一步每次启动都跑，但只有真的缺数据时才写库（302 条里挑出空的，成本可以忽略）。
+     */
+    private suspend fun repairSeriesData() {
+        val all = dao.observeSongs().first()
+        if (all.isEmpty()) return
+        val missing = all.filter { it.tour.isBlank() && it.externalId.isNotBlank() }
+        if (missing.isEmpty()) return
+        val archive = com.vmap.app.data.song.SongArchive.load(context).associateBy { it.id }
+        if (archive.isEmpty()) return
+        val fixed = missing.mapNotNull { song ->
+            val a = archive[song.externalId] ?: return@mapNotNull null
+            if (a.tour.isBlank()) return@mapNotNull null
+            song.copy(
+                tour = a.tour,
+                years = if (song.years.isBlank()) a.years else song.years,
+                series = if (song.series.isBlank()) a.series else song.series,
+                perfCount = if (song.perfCount <= 0) a.perfCount else song.perfCount,
+            )
+        }
+        android.util.Log.i(
+            "VMapRepair",
+            "all=${all.size} missing=${missing.size} archive=${archive.size} fixed=${fixed.size}",
+        )
+        if (fixed.isNotEmpty()) dao.upsertSongs(fixed)
     }
 
     /**
