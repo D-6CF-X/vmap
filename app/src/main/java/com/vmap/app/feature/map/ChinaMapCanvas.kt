@@ -10,6 +10,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -239,18 +240,7 @@ fun ChinaMapCanvas(
     // 但 size 只有 onDraw 里才知道，这里用 onSizeChanged 提出来。
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
 
-    // 静态光点：光点只在「我的路线」上走，拆到独立 overlay 层，
-    // 用 rememberInfiniteTransition 每帧只重绘光点自己，不再拖整张地图每帧失效。
-    val routeAnim = rememberInfiniteTransition(label = "dot")
-    val routeFlow by routeAnim.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(22_000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "dotflow",
-    )
+    // 光点动画放在独立的 RouteDotOverlay 里，animated=false 时整个不组合、不空转。
 
     // ===== 巡演点亮动画状态机：官方线 / 我的线各一套，并行播放、互不打断 =====
     var officialPhase by remember { mutableStateOf<TourPhase>(TourPhase.Idle) }
@@ -1565,45 +1555,61 @@ fun ChinaMapCanvas(
         }
 
         // ===== 静态光点 overlay：独立一层，只重绘光点，不碰上面的整张地图 =====
-        // 之前 flowTick 每帧写 Compose 状态，会让整个主 Canvas 60fps 失效，
-        // 370 个地块 + 文字避让 + 渐变全部每帧重算——这就是「前台地图后台还在跑」的卡顿源。
-        // 现在光点单独一层，每帧只算 4 个圆，地图静态部分只在缩放/拖动/点亮变化时重绘。
-        Canvas(
-            modifier = Modifier.matchParentSize(),
-        ) {
-            if (animated && myRouteSegs.size >= 2) {
-                val totalLen = myRouteSegs.sumOf { it.len.toDouble() }.toFloat()
-                if (totalLen > 1f) {
-                    val head = routeFlow
-                    val alpha = minOf(
-                        (head / 0.07f).coerceIn(0f, 1f),
-                        ((1f - head) / 0.10f).coerceIn(0f, 1f),
-                    )
-                    if (alpha > 0.01f) {
-                        fun sample(dist: Float): Pair<Offset, Color>? {
-                            var d = dist
-                            for (s in myRouteSegs) {
-                                if (d <= s.len || s === myRouteSegs.last()) {
-                                    val lt = (d / s.len).coerceIn(0f, 1f)
-                                    return quadPoint(s.a, s.ctrl, s.b, lt) to lerp(s.c1, s.c2, lt)
-                                }
-                                d -= s.len
-                            }
-                            return null
-                        }
-                        val d0 = head * totalLen
-                        for (k in 1..3) {
-                            val prev = sample(d0 - k * 15f) ?: continue
-                            val fade = (1f - k * 0.26f).coerceAtLeast(0f)
-                            drawCircle(prev.second.copy(alpha = 0.42f * fade * alpha), radius = 4.4f * fade, center = prev.first)
-                        }
-                        sample(d0)?.let { (pos, col) ->
-                            drawCircle(col.copy(alpha = 0.24f * alpha), radius = 9f, center = pos)
-                            drawCircle(Color.White.copy(alpha = 0.95f * alpha), radius = 3.5f, center = pos)
-                        }
-                    }
+        // 之前 flowTick 每帧写 Compose 状态，会让整个主 Canvas 60fps 失效。
+        // 现在光点单独一层，且只在 animated 时组合——app 退后台/小窗时整层不组合，
+        // 无限动画不启动，不空转。
+        if (animated) {
+            RouteDotOverlay(myRouteSegs)
+        }
+    }
+}
+
+/**
+ * 静态光点层：`rememberInfiniteTransition` 驱动，每帧只画 4 个圆。
+ * 独立成一个 Composable，`animated=false` 时外层根本不组合它，动画就不会在后台空转。
+ */
+@Composable
+private fun RouteDotOverlay(segs: List<RouteSeg>) {
+    val anim = rememberInfiniteTransition(label = "dot")
+    val flow by anim.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(22_000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "dotflow",
+    )
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        if (segs.size < 2) return@Canvas
+        val totalLen = segs.sumOf { it.len.toDouble() }.toFloat()
+        if (totalLen <= 1f) return@Canvas
+        val head = flow
+        val alpha = minOf(
+            (head / 0.07f).coerceIn(0f, 1f),
+            ((1f - head) / 0.10f).coerceIn(0f, 1f),
+        )
+        if (alpha <= 0.01f) return@Canvas
+        fun sample(dist: Float): Pair<Offset, Color>? {
+            var d = dist
+            for (s in segs) {
+                if (d <= s.len || s === segs.last()) {
+                    val lt = (d / s.len).coerceIn(0f, 1f)
+                    return quadPoint(s.a, s.ctrl, s.b, lt) to lerp(s.c1, s.c2, lt)
                 }
+                d -= s.len
             }
+            return null
+        }
+        val d0 = head * totalLen
+        for (k in 1..3) {
+            val prev = sample(d0 - k * 15f) ?: continue
+            val fade = (1f - k * 0.26f).coerceAtLeast(0f)
+            drawCircle(prev.second.copy(alpha = 0.42f * fade * alpha), radius = 4.4f * fade, center = prev.first)
+        }
+        sample(d0)?.let { (pos, col) ->
+            drawCircle(col.copy(alpha = 0.24f * alpha), radius = 9f, center = pos)
+            drawCircle(Color.White.copy(alpha = 0.95f * alpha), radius = 3.5f, center = pos)
         }
     }
 }

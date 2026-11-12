@@ -239,16 +239,18 @@ fun SongBoardScreen(
         // 空出来的高度全给评级行，卡片才不至于小成一排邮票
         val bottomPad = if (landscape) 56.dp else 112.dp
 
-        // tier 墙的格子：按像素算列数（Dp 除法容易差一格），余量摊平成格宽
+        // tier 墙的格子：按像素算列数（Dp 除法容易差一格），余量摊平成格宽。
+        // 目标格宽横竖屏统一 64dp，横屏屏宽大 → 列数自然变多，但格子大小一致，
+        // 不会出现「横屏是另一种墙」的观感。
         val wallSidePad = 16.dp
         val wallLeft = 46.dp
         val wallGap = 2.dp
-        val wallTargetCell = if (landscape) 56.dp else 64.dp
+        val wallTargetCell = 64.dp
         val (wallColumns, wallCell) = with(density) {
             val availPx = maxWidth.toPx() - wallSidePad.toPx() - wallLeft.toPx() - wallGap.toPx()
             val gapPx = wallGap.toPx()
             val targetPx = wallTargetCell.toPx()
-            val cols = ((availPx + gapPx) / (targetPx + gapPx)).toInt().coerceIn(4, 20)
+            val cols = ((availPx + gapPx) / (targetPx + gapPx)).toInt().coerceIn(3, 24)
             cols to ((availPx - gapPx * (cols - 1)) / cols).toDp()
         }
 
@@ -333,8 +335,8 @@ fun SongBoardScreen(
                         }
                     }
 
-                    // 演唱会系列（横屏时先收起来，把高度留给歌）
-                    if (tours.size > 1 && !landscape) {
+                    // 演唱会系列（横竖屏都显示，横竖屏内容一致；高度不够靠滚动）
+                    if (tours.size > 1) {
                         Spacer(Modifier.height(6.dp))
                         androidx.compose.foundation.lazy.LazyRow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -358,7 +360,7 @@ fun SongBoardScreen(
 
                     // 选了系列之后，再往下钻一层：这一轮巡演的具体场次（城市 + 日期）
                     // 点某一场就把年份锁到那一年，等于看「这一站这一轮唱的歌」的排行
-                    if (tourSessions.isNotEmpty() && !landscape) {
+                    if (tourSessions.isNotEmpty()) {
                         Spacer(Modifier.height(6.dp))
                         androidx.compose.foundation.lazy.LazyRow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),

@@ -185,16 +185,18 @@ private fun VMapRoot() {
         val drawerState = rememberDrawerState(DrawerValue.Closed)
         val scope = rememberCoroutineScope()
 
-        // ===== 启动动画：Logo 渐显 + 应援色光晕，600ms 后整层淡出 =====
-        // 只跑一次（进程内），淡出完成后把遮罩从组合树里摘掉，不再占一层。
-        var splashGone by remember { mutableStateOf(false) }
+        // ===== 启动动画：Logo 渐显 + 应援色光晕，只在整个进程第一次进入时跑 =====
+        // 用 rememberSaveable：横竖屏切换 / 进小窗会让 Activity 重建，
+        // 用普通 remember 的话状态会重置、开屏动画再放一遍。saveable 跨配置变更保留。
+        var splashGone by rememberSaveable { mutableStateOf(false) }
         val splashAlpha by animateFloatAsState(
             targetValue = if (splashGone) 0f else 1f,
             animationSpec = tween(420),
             label = "splash",
         )
         var splashInner by remember { mutableFloatStateOf(0f) }
-        LaunchedEffect(Unit) {
+        LaunchedEffect(splashGone) {
+            if (splashGone) return@LaunchedEffect
             // 内容淡入
             while (splashInner < 1f) {
                 splashInner = (splashInner + 0.06f).coerceAtMost(1f)

@@ -86,6 +86,22 @@ fun MapScreen(
     var detailSpot by remember { mutableStateOf<Spot?>(null) }
     var showTrip by remember { mutableStateOf(false) }
 
+    // 生命周期：app 退到后台 / 切到小窗（onStop）时把地图动画冻结掉，
+    // 不然光点 overlay 的无限动画还在后台空转，小窗下尤其拖慢系统。
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    var appVisible by remember { mutableStateOf(true) }
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_START -> appVisible = true
+                androidx.lifecycle.Lifecycle.Event.ON_STOP -> appVisible = false
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     // 官方路线：档案里开过的场次（不依赖我有没有去），按年份与板块筛
     val archiveEvents = remember { com.vmap.app.data.archive.ConcertArchive.load(context) }
 
@@ -173,8 +189,8 @@ fun MapScreen(
             mixed = board == Board.ALL,
             mixProgress = mixProgress,
             onSpotClick = { detailSpot = it },
-            // 有弹窗盖着时冻结动画，避免后台地图每帧重绘拖慢对话框
-            animated = detailSpot == null && !dimmed,
+            // 有弹窗盖着、或 app 不在前台时冻结动画，避免后台地图每帧重绘拖慢系统
+            animated = detailSpot == null && !dimmed && appVisible,
             isDark = isDark,
             darkProgress = darkProgress,
             yearLayers = yearLayers,
