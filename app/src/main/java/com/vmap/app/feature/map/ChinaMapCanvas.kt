@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,6 +25,8 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
@@ -232,6 +235,23 @@ fun ChinaMapCanvas(
     var offset by remember { mutableStateOf(Offset.Zero) }
     var selectedAdcode by remember { mutableStateOf<String?>(null) }
 
+    // 画布实际尺寸（px）。静态光点的 overlay 层要和主地图共用同一套投影，
+    // 但 size 只有 onDraw 里才知道，这里用 onSizeChanged 提出来。
+    var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+
+    // 静态光点：光点只在「我的路线」上走，拆到独立 overlay 层，
+    // 用 rememberInfiniteTransition 每帧只重绘光点自己，不再拖整张地图每帧失效。
+    val routeAnim = rememberInfiniteTransition(label = "dot")
+    val routeFlow by routeAnim.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(22_000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "dotflow",
+    )
+
     // ===== 巡演点亮动画状态机：官方线 / 我的线各一套，并行播放、互不打断 =====
     var officialPhase by remember { mutableStateOf<TourPhase>(TourPhase.Idle) }
     var officialLit by remember { mutableIntStateOf(0) }
@@ -383,22 +403,8 @@ fun ChinaMapCanvas(
         onTourEnd()
     }
 
-    // 静态光点的时钟：按屏幕刷新率（60fps）走，光点滑得顺。
-    // 分组 / 变换 / 渐变的开销已经在前面砍掉了，直接每帧更新也扛得住。
-    var flowTick by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(animated) {
-        if (!animated) return@LaunchedEffect
-        val periodMs = 22_000L
-        var startNanos = 0L
-        while (true) {
-            withFrameNanos { now ->
-                if (startNanos == 0L) startNanos = now
-                flowTick = ((now - startNanos) / 1_000_000L % periodMs).toFloat() / periodMs
-            }
-        }
-    }
-    // 静态路线走一趟 22s：不快不慢，看得清它顺着哪条线往前挪
-    val flow = if (animated) flowTick else 0.5f
+    // 静态光点用独立的 overlay 层画（见下方 Box 里的第二个 Canvas），
+    // 这里不再有每帧写状态的时钟——那会让整个主 Canvas 60fps 失效重绘。
 
     // 所有城市名预测量缓存（字号小，学高德不抢戏）
     val labelLayouts = remember(provinces) {
@@ -504,6 +510,37 @@ fun ChinaMapCanvas(
         ChinaMapData.latToY(spot.point.asWgs84().lat),
     )
 
+    // 光点沿线走的航段，只在路线/缩放/尺寸变化时重算一次（不是每帧）
+    val myRouteSegs = remember(myStops, scale, offset, canvasSize) {
+        if (myStops.size < 2 || canvasSize == IntSize.Zero) return@remember emptyList<RouteSeg>()
+        val base = min(
+            canvasSize.width.toFloat() / ChinaMapData.VW,
+            canvasSize.height.toFloat() / ChinaMapData.VH,
+        )
+        val dx = (canvasSize.width - ChinaMapData.VW * base) / 2 + offset.x
+        val dy = (canvasSize.height - ChinaMapData.VH * base) / 2 + offset.y
+        val k = base * scale
+        fun toScreen(vx: Float, vy: Float) = Offset(vx * k + dx, vy * k + dy)
+        val list = ArrayList<RouteSeg>(myStops.size - 1)
+        for (i in 0 until myStops.size - 1) {
+            val from = myStops[i]
+            val to = myStops[i + 1]
+            val a = toScreen(spotVirtual(from).x, spotVirtual(from).y)
+            val b = toScreen(spotVirtual(to).x, spotVirtual(to).y)
+            val ddx = b.x - a.x
+            val ddy = b.y - a.y
+            val len = hypot(ddx, ddy)
+            if (len <= 0.5f) continue
+            var nx = -ddy / len
+            var ny = ddx / len
+            if (ny > 0) { nx = -nx; ny = -ny }
+            val height = len * 0.28f
+            val ctrl = Offset((a.x + b.x) / 2 + nx * height, (a.y + b.y) / 2 + ny * height)
+            list.add(RouteSeg(a, ctrl, b, cityColors(from.adcode).first, cityColors(to.adcode).second, len))
+        }
+        list
+    }
+
     // ===== 巡演播放的派生状态，全部提到 Canvas 外面算 =====
     // 这些东西原来写在 onDraw 里，每帧都要重新跑一遍 filter + sort（370 个地块 × 2 次排序），
     // 播放动画时整块画布每帧重绘，光是这些集合运算就把主线程吃满了。
@@ -556,30 +593,33 @@ fun ChinaMapCanvas(
         provincesByArea.filter { isKeyCity(it.adcode) }
     }
 
-    Canvas(
-        modifier = modifier
-            .pointerInput(Unit) {
-                detectTransformGestures { centroid, pan, zoom, _ ->
-                    val newScale = (scale * zoom).coerceIn(1f, 10f)
-                    val base = min(
-                        size.width / ChinaMapData.VW,
-                        size.height / ChinaMapData.VH,
-                    )
-                    val cx = (size.width - ChinaMapData.VW * base) / 2
-                    val cy = (size.height - ChinaMapData.VH * base) / 2
-                    val ratio = newScale / scale
-                    if (ratio != 1f) {
-                        offset = Offset(
-                            centroid.x - cx - (centroid.x - cx - offset.x) * ratio,
-                            centroid.y - cy - (centroid.y - cy - offset.y) * ratio,
+    Box(modifier = modifier) {
+        Canvas(
+            modifier = Modifier
+                .matchParentSize()
+                .onSizeChanged { canvasSize = it }
+                .pointerInput(Unit) {
+                    detectTransformGestures { centroid, pan, zoom, _ ->
+                        val newScale = (scale * zoom).coerceIn(1f, 10f)
+                        val base = min(
+                            size.width / ChinaMapData.VW,
+                            size.height / ChinaMapData.VH,
                         )
+                        val cx = (size.width - ChinaMapData.VW * base) / 2
+                        val cy = (size.height - ChinaMapData.VH * base) / 2
+                        val ratio = newScale / scale
+                        if (ratio != 1f) {
+                            offset = Offset(
+                                centroid.x - cx - (centroid.x - cx - offset.x) * ratio,
+                                centroid.y - cy - (centroid.y - cy - offset.y) * ratio,
+                            )
+                        }
+                        offset += pan
+                        scale = newScale
                     }
-                    offset += pan
-                    scale = newScale
                 }
-            }
-            .pointerInput(provinces, activeSpots, scale, offset) {
-                detectTapGestures { tap ->
+                .pointerInput(provinces, activeSpots, scale, offset) {
+                    detectTapGestures { tap ->
                     val w = size.width.toFloat()
                     val h = size.height.toFloat()
                     val base = min(w / ChinaMapData.VW, h / ChinaMapData.VH)
@@ -1183,39 +1223,7 @@ fun ChinaMapCanvas(
                 }
             }
 
-            // 光点只有一个：沿整条路线按航段顺序走过去，不再「每段各一个点一起出发」。
-            // 播放官方路线时，我的这条光点也继续走自己的，和官方动画分开显示（两条线互不干扰）。
-            val totalLen = segs.sumOf { it.len.toDouble() }.toFloat()
-            if (totalLen > 1f) {
-                val head = flow
-                val alpha = minOf(
-                    (head / 0.07f).coerceIn(0f, 1f),
-                    ((1f - head) / 0.10f).coerceIn(0f, 1f),
-                )
-                if (alpha > 0.01f) {
-                    fun sample(dist: Float): Pair<Offset, Color>? {
-                        var d = dist
-                        for (s in segs) {
-                            if (d <= s.len || s === segs.last()) {
-                                val lt = (d / s.len).coerceIn(0f, 1f)
-                                return quadPoint(s.a, s.ctrl, s.b, lt) to lerp(s.c1, s.c2, lt)
-                            }
-                            d -= s.len
-                        }
-                        return null
-                    }
-                    val d0 = head * totalLen
-                    for (k in 1..3) {
-                        val prev = sample(d0 - k * 15f) ?: continue
-                        val fade = (1f - k * 0.26f).coerceAtLeast(0f)
-                        drawCircle(prev.second.copy(alpha = 0.42f * fade * alpha), radius = 4.4f * fade, center = prev.first)
-                    }
-                    sample(d0)?.let { (pos, col) ->
-                        drawCircle(col.copy(alpha = 0.24f * alpha), radius = 9f, center = pos)
-                        drawCircle(Color.White.copy(alpha = 0.95f * alpha), radius = 3.5f, center = pos)
-                    }
-                }
-            }
+            // 光点挪到独立 overlay 层画了（见下方 Box），主 Canvas 不再每帧重绘。
         }
 
         // ===== 换系列提示：地图上方飘一下系列名，2.4s 自动消失 =====
@@ -1554,6 +1562,49 @@ fun ChinaMapCanvas(
         }
 
         // 点亮城市不再画圆点：靠地块填色 + 立体城市名表达，点位留给路线端点
+        }
+
+        // ===== 静态光点 overlay：独立一层，只重绘光点，不碰上面的整张地图 =====
+        // 之前 flowTick 每帧写 Compose 状态，会让整个主 Canvas 60fps 失效，
+        // 370 个地块 + 文字避让 + 渐变全部每帧重算——这就是「前台地图后台还在跑」的卡顿源。
+        // 现在光点单独一层，每帧只算 4 个圆，地图静态部分只在缩放/拖动/点亮变化时重绘。
+        Canvas(
+            modifier = Modifier.matchParentSize(),
+        ) {
+            if (animated && myRouteSegs.size >= 2) {
+                val totalLen = myRouteSegs.sumOf { it.len.toDouble() }.toFloat()
+                if (totalLen > 1f) {
+                    val head = routeFlow
+                    val alpha = minOf(
+                        (head / 0.07f).coerceIn(0f, 1f),
+                        ((1f - head) / 0.10f).coerceIn(0f, 1f),
+                    )
+                    if (alpha > 0.01f) {
+                        fun sample(dist: Float): Pair<Offset, Color>? {
+                            var d = dist
+                            for (s in myRouteSegs) {
+                                if (d <= s.len || s === myRouteSegs.last()) {
+                                    val lt = (d / s.len).coerceIn(0f, 1f)
+                                    return quadPoint(s.a, s.ctrl, s.b, lt) to lerp(s.c1, s.c2, lt)
+                                }
+                                d -= s.len
+                            }
+                            return null
+                        }
+                        val d0 = head * totalLen
+                        for (k in 1..3) {
+                            val prev = sample(d0 - k * 15f) ?: continue
+                            val fade = (1f - k * 0.26f).coerceAtLeast(0f)
+                            drawCircle(prev.second.copy(alpha = 0.42f * fade * alpha), radius = 4.4f * fade, center = prev.first)
+                        }
+                        sample(d0)?.let { (pos, col) ->
+                            drawCircle(col.copy(alpha = 0.24f * alpha), radius = 9f, center = pos)
+                            drawCircle(Color.White.copy(alpha = 0.95f * alpha), radius = 3.5f, center = pos)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

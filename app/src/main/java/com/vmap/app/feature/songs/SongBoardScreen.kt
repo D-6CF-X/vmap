@@ -917,6 +917,9 @@ private fun TierCell(
 ) {
     val context = LocalContext.current
     var center by remember { mutableStateOf(Offset.Zero) }
+    // 上次上报的窗口 rect：只有真的变了才写 state / 通知上层，
+    // 否则滚动时 297 个格子反复写同一个 map 会把主线程拖垮。
+    var lastRect by remember { mutableStateOf(Rect.Zero) }
     Box(
         modifier = Modifier
             .size(size)
@@ -933,8 +936,11 @@ private fun TierCell(
             .clip(RoundedCornerShape(3.dp))
             .onGloballyPositioned {
                 val b = it.boundsInWindow()
-                onBounds(b)
-                center = b.center
+                if (b != lastRect) {
+                    lastRect = b
+                    onBounds(b)
+                    center = b.center
+                }
             }
             .pointerInput(song.id) {
                 // 长按才拖：短按是打开编辑，直接拖会和列表滚动打架
@@ -1012,6 +1018,7 @@ private fun CompactSongCard(
     size: Dp = 56.dp,
 ) {
     var center by remember { mutableStateOf(Offset.Zero) }
+    var lastRect by remember { mutableStateOf(Rect.Zero) }
     Column(
         modifier = Modifier
             .width(size)
@@ -1025,8 +1032,12 @@ private fun CompactSongCard(
                 }
             }
             .onGloballyPositioned { coords ->
-                onBounds(coords.boundsInWindow())
-                center = coords.boundsInWindow().center
+                val b = coords.boundsInWindow()
+                if (b != lastRect) {
+                    lastRect = b
+                    onBounds(b)
+                    center = b.center
+                }
             }
             .pointerInput(song.id) {
                 detectDragGesturesAfterLongPress(

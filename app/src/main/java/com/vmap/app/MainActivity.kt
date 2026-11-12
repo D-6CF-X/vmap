@@ -16,6 +16,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.animateColorAsState
 import com.vmap.app.core.ui.THEME_TRANSITION_MS
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -56,6 +57,7 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -67,6 +69,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -182,6 +185,24 @@ private fun VMapRoot() {
         val drawerState = rememberDrawerState(DrawerValue.Closed)
         val scope = rememberCoroutineScope()
 
+        // ===== 启动动画：Logo 渐显 + 应援色光晕，600ms 后整层淡出 =====
+        // 只跑一次（进程内），淡出完成后把遮罩从组合树里摘掉，不再占一层。
+        var splashGone by remember { mutableStateOf(false) }
+        val splashAlpha by animateFloatAsState(
+            targetValue = if (splashGone) 0f else 1f,
+            animationSpec = tween(420),
+            label = "splash",
+        )
+        var splashInner by remember { mutableFloatStateOf(0f) }
+        LaunchedEffect(Unit) {
+            // 内容淡入
+            while (splashInner < 1f) {
+                splashInner = (splashInner + 0.06f).coerceAtMost(1f)
+                kotlinx.coroutines.delay(16)
+            }
+            kotlinx.coroutines.delay(420)
+            splashGone = true
+        }
         // 主色跟着板块过渡，切到综合就是蓝绿中间色
         val accent = animateColorAsState(
             targetValue = board.accent,
@@ -413,6 +434,76 @@ private fun VMapRoot() {
                     cropSource = null
                 },
             )
+        }
+
+        // 启动遮罩：画在最上层，覆盖所有页面和抽屉，淡出完就摘掉
+        if (!splashGone || splashAlpha > 0.01f) {
+            SplashOverlay(
+                alpha = splashAlpha,
+                inner = splashInner,
+                isDark = isDark,
+                accent = board.accent,
+            )
+        }
+    }
+}
+
+/** 启动遮罩：全屏覆盖，应援色光晕 + Logo 渐显，淡出完成后由上层摘掉。 */
+@Composable
+private fun SplashOverlay(
+    alpha: Float,
+    inner: Float,
+    isDark: Boolean,
+    accent: Color,
+) {
+    androidx.compose.ui.window.Popup(
+        properties = androidx.compose.ui.window.PopupProperties(focusable = false),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            if (isDark) Color(0xFF0B0E13) else Color(0xFFF4F8FD),
+                            if (isDark) Color(0xFF101520) else Color(0xFFE6EDF8),
+                        ),
+                    ),
+                )
+                .graphicsLayer { this.alpha = alpha },
+            contentAlignment = Alignment.Center,
+        ) {
+            // 应援色光晕：内容淡入时跟着扩散，Logo 压在上面
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        listOf(accent.copy(alpha = 0.28f * inner), Color.Transparent),
+                        center = center,
+                        radius = size.minDimension * 0.55f * inner,
+                    ),
+                    radius = size.minDimension * 0.55f,
+                    center = center,
+                )
+            }
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = "V-Map",
+                    color = accent.copy(alpha = inner),
+                    fontSize = 42.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "虚拟歌姬演出地图",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = inner * 0.85f),
+                    fontSize = 13.sp,
+                    letterSpacing = 4.sp,
+                )
+            }
         }
     }
 }
