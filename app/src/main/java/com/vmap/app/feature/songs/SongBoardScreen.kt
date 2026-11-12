@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
-import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -33,6 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,8 +51,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -169,10 +171,7 @@ fun SongBoardScreen(
         val cards = cardBounds.filterKeys { it in tierIds }
         if (cards.isEmpty()) return
 
-        val before = cards.count { (_, r) ->
-            r.center.y < center.y - 14f ||
-                (kotlin.math.abs(r.center.y - center.y) <= 14f && r.center.x < center.x)
-        }
+        val before = cards.count { (_, r) -> r.center.x < center.x }
         val sameRow = song.ratingId == targetId
         val current = rows.firstOrNull { it.first.id == targetId }
             ?.second?.indexOfFirst { it.id == song.id } ?: -1
@@ -183,23 +182,42 @@ fun SongBoardScreen(
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val landscape = maxWidth > maxHeight
-        // 小图模式按可用宽度摊列：竖屏 4 列左右，横屏能摊到 8～12 列，一屏能看二三十首
-        val columns = ((maxWidth - 20.dp) / 76.dp).toInt().coerceIn(3, 14)
+        // 小图模式的密度：横屏一页正好 5 个评级（一行一个评级，行高按屏高均分），
+        // 竖屏不强制分页，卡片保持 64dp 左右，一屏能看到六七个评级。
+        // header 的真实高度是量出来的——筛选行多一行少一行都不会把「一页 5 个」算歪。
+        var headerHeight by remember { mutableIntStateOf(0) }
+        val density = LocalDensity.current
+        val topPad = if (landscape) 62.dp else 92.dp
+        // 横屏底部不需要留那么多空白（没有悬浮按钮），留 56dp 就够，
+        // 空出来的高度全给评级行，卡片才不至于小成一排邮票
+        val bottomPad = if (landscape) 56.dp else 112.dp
+        val compactRowH = when {
+            !landscape -> 100.dp
+            headerHeight > 0 -> with(density) {
+                // 屏高扣掉上下留白和 header，剩下的均分给 5 个评级
+                (((maxHeight - topPad - bottomPad).toPx() - headerHeight) / 5f).toDp()
+            }.coerceIn(44.dp, 120.dp)
+
+            else -> 64.dp
+        }
+        val compactCard = (compactRowH - 18.dp).coerceIn(30.dp, 82.dp)
 
         LazyVerticalStaggeredGrid(
-            columns = if (compact) StaggeredGridCells.Fixed(columns) else StaggeredGridCells.Fixed(1),
+            columns = StaggeredGridCells.Fixed(1),
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = if (landscape) 62.dp else 92.dp,
-                bottom = 112.dp,
-                start = if (compact) 10.dp else 0.dp,
-                end = if (compact) 10.dp else 0.dp,
+                top = topPad,
+                bottom = bottomPad,
             ),
-            horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 12.dp),
-            verticalItemSpacing = if (compact) 6.dp else 0.dp,
+            horizontalArrangement = Arrangement.spacedBy(0.dp),
+            verticalItemSpacing = 0.dp,
         ) {
             item(key = "header", span = StaggeredGridItemSpan.FullLine) {
-                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                Column(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .onGloballyPositioned { headerHeight = it.size.height },
+                ) {
                     GradientTitle(text = "歌曲鉴赏", accent = accent, fontSize = 24.sp)
                     Spacer(Modifier.height(2.dp))
                     Text(
@@ -278,31 +296,25 @@ fun SongBoardScreen(
             }
 
             rows.forEach { (rating, list) ->
-                item(key = "row-${rating.id}", span = StaggeredGridItemSpan.FullLine) {
-                    TierLabel(
-                        rating = rating,
-                        count = list.size,
-                        isDark = isDark,
-                        compact = compact,
-                        onBounds = { rowBounds[rating.id] = it },
-                    )
-                }
                 if (compact) {
-                    items(list, key = { it.id }) { song ->
-                        CompactSongCard(
-                            song = song,
-                            rank = list.indexOf(song) + 1,
-                            ratingColor = Color(rating.color),
+                    // 小图：一行就是一个评级——左边评级徽章，右边一条小图横滑。横屏一页正好 5 个评级。
+                    item(key = "row-${rating.id}") {
+                        CompactTierRow(
+                            rating = rating,
+                            songs = list,
+                            cardSize = compactCard,
+                            rowHeight = compactRowH,
                             isDark = isDark,
-                            isDragging = dragging?.id == song.id,
-                            dragDelta = if (dragging?.id == song.id) dragDelta else Offset.Zero,
-                            onBounds = { cardBounds[song.id] = it },
-                            onDragStart = { from ->
+                            draggingId = dragging?.id,
+                            dragDelta = dragDelta,
+                            onBounds = { rowBounds[rating.id] = it },
+                            onCardBounds = { id, rect -> cardBounds[id] = rect },
+                            onDragStart = { song, from ->
                                 dragging = song
                                 dragFrom = from
                                 dragDelta = Offset.Zero
                             },
-                            onDrag = { amount ->
+                            onDrag = { song, amount ->
                                 dragDelta += amount
                                 commitDrag(song)
                             },
@@ -310,14 +322,24 @@ fun SongBoardScreen(
                                 dragging = null
                                 dragDelta = Offset.Zero
                             },
-                            onClick = { editing = song },
+                            onCardClick = { editing = it },
                         )
                     }
                 } else {
+                    item(key = "row-${rating.id}", span = StaggeredGridItemSpan.FullLine) {
+                        TierLabel(
+                            rating = rating,
+                            count = list.size,
+                            isDark = isDark,
+                            compact = false,
+                            onBounds = { rowBounds[rating.id] = it },
+                        )
+                    }
                     item(key = "band-${rating.id}", span = StaggeredGridItemSpan.FullLine) {
-                        TierBand(
+                        TierRow(
                             songs = list,
                             ratingColor = Color(rating.color),
+                            compact = false,
                             yearFilter = yearFilter,
                             isDark = isDark,
                             draggingId = dragging?.id,
@@ -456,11 +478,12 @@ private fun TierLabel(
     }
 }
 
-/** 大图模式的一条横向曲绘带。 */
+/** 一个评级的一整行：横向滚动的曲绘卡片。小图=小方块，大图=3:4 海报。 */
 @Composable
-private fun TierBand(
+private fun TierRow(
     songs: List<Song>,
     ratingColor: Color,
+    compact: Boolean,
     yearFilter: Int,
     isDark: Boolean,
     draggingId: String?,
@@ -474,27 +497,43 @@ private fun TierBand(
     androidx.compose.foundation.lazy.LazyRow(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 12.dp),
     ) {
         if (songs.isEmpty()) {
             item(key = "empty") { EmptySlot(ratingColor) }
         }
         songs.forEach { song ->
             item(key = song.id) {
-                SongPosterCard(
-                    song = song,
-                    rank = songs.indexOf(song) + 1,
-                    yearFilter = yearFilter,
-                    ratingColor = ratingColor,
-                    isDark = isDark,
-                    isDragging = draggingId == song.id,
-                    dragDelta = if (draggingId == song.id) dragDelta else Offset.Zero,
-                    onBounds = { onCardBounds(song.id, it) },
-                    onDragStart = { from -> onDragStart(song, from) },
-                    onDrag = { amount -> onDrag(song, amount) },
-                    onDragEnd = onDragEnd,
-                    onClick = { onCardClick(song) },
-                )
+                if (compact) {
+                    CompactSongCard(
+                        song = song,
+                        rank = songs.indexOf(song) + 1,
+                        ratingColor = ratingColor,
+                        isDark = isDark,
+                        isDragging = draggingId == song.id,
+                        dragDelta = if (draggingId == song.id) dragDelta else Offset.Zero,
+                        onBounds = { onCardBounds(song.id, it) },
+                        onDragStart = { from -> onDragStart(song, from) },
+                        onDrag = { amount -> onDrag(song, amount) },
+                        onDragEnd = onDragEnd,
+                        onClick = { onCardClick(song) },
+                    )
+                } else {
+                    SongPosterCard(
+                        song = song,
+                        rank = songs.indexOf(song) + 1,
+                        yearFilter = yearFilter,
+                        ratingColor = ratingColor,
+                        isDark = isDark,
+                        isDragging = draggingId == song.id,
+                        dragDelta = if (draggingId == song.id) dragDelta else Offset.Zero,
+                        onBounds = { onCardBounds(song.id, it) },
+                        onDragStart = { from -> onDragStart(song, from) },
+                        onDrag = { amount -> onDrag(song, amount) },
+                        onDragEnd = onDragEnd,
+                        onClick = { onCardClick(song) },
+                    )
+                }
             }
         }
     }
@@ -653,9 +692,98 @@ private fun SongPosterCard(
                         .padding(horizontal = 5.dp, vertical = 2.dp),
                 ) {
                     Text(
-                        text = if (song.linkLabel.contains("官方")) "B站官方" else "B站",
+                        text = biliBadge(song.linkLabel),
                         color = Color.White.copy(alpha = 0.9f),
                         fontSize = 8.sp,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 小图模式的一行：左边一个评级徽章，右边一条横滑的小图。
+ *
+ * 一行只放一个评级，横屏时整行高度 = 屏高/5，一页正好看完 5 个评级；
+ * 竖屏时行高固定一点，卡片不至于被拉成巨幅海报。
+ */
+@Composable
+private fun CompactTierRow(
+    rating: SongRating,
+    songs: List<Song>,
+    cardSize: Dp,
+    rowHeight: Dp,
+    isDark: Boolean,
+    draggingId: String?,
+    dragDelta: Offset,
+    onBounds: (Rect) -> Unit,
+    onCardBounds: (String, Rect) -> Unit,
+    onDragStart: (Song, Offset) -> Unit,
+    onDrag: (Song, Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    onCardClick: (Song) -> Unit,
+) {
+    val color = Color(rating.color)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(rowHeight)
+            .onGloballyPositioned { onBounds(it.boundsInWindow()) }
+            .padding(start = 12.dp, end = 0.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // 评级徽章：竖着立在行首，像唱片架上的一枚标签
+        Column(
+            modifier = Modifier
+                .width(40.dp)
+                .height(cardSize + 14.dp)
+                .clip(RoundedCornerShape(9.dp))
+                .background(color.copy(alpha = if (isDark) 0.20f else 0.16f))
+                .border(1.dp, color.copy(alpha = 0.55f), RoundedCornerShape(9.dp)),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = rating.name,
+                color = if (isDark) lerp(color, Color.White, 0.45f) else lerp(color, Color(0xFF08161E), 0.30f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "${songs.size}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                fontSize = 8.sp,
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+
+        androidx.compose.foundation.lazy.LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(end = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (songs.isEmpty()) {
+                item(key = "empty") { EmptySlot(color, Modifier.size(cardSize)) }
+            }
+            songs.forEach { song ->
+                item(key = song.id) {
+                    CompactSongCard(
+                        song = song,
+                        rank = songs.indexOf(song) + 1,
+                        ratingColor = color,
+                        isDark = isDark,
+                        size = cardSize,
+                        isDragging = draggingId == song.id,
+                        dragDelta = if (draggingId == song.id) dragDelta else Offset.Zero,
+                        onBounds = { onCardBounds(song.id, it) },
+                        onDragStart = { from -> onDragStart(song, from) },
+                        onDrag = { amount -> onDrag(song, amount) },
+                        onDragEnd = onDragEnd,
+                        onClick = { onCardClick(song) },
                     )
                 }
             }
@@ -677,11 +805,12 @@ private fun CompactSongCard(
     onDrag: (Offset) -> Unit,
     onDragEnd: () -> Unit,
     onClick: () -> Unit,
+    size: Dp = 56.dp,
 ) {
     var center by remember { mutableStateOf(Offset.Zero) }
     Column(
         modifier = Modifier
-            .fillMaxWidth()
+            .width(size)
             .zIndex(if (isDragging) 2f else 0f)
             .graphicsLayer {
                 translationX = dragDelta.x
@@ -749,7 +878,7 @@ private fun CompactSongCard(
             )
             if (song.linkUrl.isNotBlank()) {
                 Text(
-                    text = if (song.linkLabel.contains("官方")) "官" else "B",
+                    text = biliBadgeCompact(song.linkLabel),
                     color = Color.White.copy(alpha = 0.9f),
                     fontSize = 7.sp,
                     modifier = Modifier
@@ -811,11 +940,12 @@ private fun CoverFallback(title: String, color: Color, isDark: Boolean) {
 }
 
 @Composable
-private fun EmptySlot(color: Color) {
+private fun EmptySlot(
+    color: Color,
+    modifier: Modifier = Modifier.size(132.dp).aspectRatio(3f / 4f),
+) {
     Box(
-        modifier = Modifier
-            .width(132.dp)
-            .aspectRatio(3f / 4f)
+        modifier = modifier
             .clip(RoundedCornerShape(20.dp))
             .background(color.copy(alpha = 0.05f))
             .border(
@@ -919,6 +1049,21 @@ private fun DensityChip(compact: Boolean, accent: Color, isDark: Boolean, onTogg
 private fun formatPlays(plays: Int): String = when {
     plays >= 10000 -> "${plays / 10000}.${(plays % 10000) / 1000} 万"
     else -> "$plays"
+}
+
+/** 来源角标：官方投稿 / 播放最高的那支 / 只有搜索入口。 */
+private fun biliBadge(label: String): String = when {
+    label.contains("官方") -> "B站官方"
+    label.contains("搜索") -> "B站搜索"
+    label.contains("最高") -> "B站热门"
+    else -> "B站"
+}
+
+/** 小图卡片的角标只有一格，用单字。 */
+private fun biliBadgeCompact(label: String): String = when {
+    label.contains("官方") -> "官"
+    label.contains("搜索") -> "搜"
+    else -> "B"
 }
 
 private const val UI_PREFS = "vmap_ui"

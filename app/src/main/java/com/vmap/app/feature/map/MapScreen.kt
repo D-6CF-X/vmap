@@ -88,6 +88,29 @@ fun MapScreen(
 
     // 官方路线：档案里开过的场次（不依赖我有没有去），按年份与板块筛
     val archiveEvents = remember { com.vmap.app.data.archive.ConcertArchive.load(context) }
+
+    // 巡演点亮动画：点某个年份 / 全体就直接播放，不需要再按播放键
+    var tourPlaying by remember { mutableStateOf(false) }
+    // 每次点年份递增，用来重启动画（点同一年也能重播）
+    var tourRunId by remember { mutableIntStateOf(0) }
+
+    /**
+     * 「这一轮要播哪一年」——点击瞬间就定下来，播放列表直接用它算。
+     *
+     * 之前是把年份交给 ViewModel 的 StateFlow，等它回灌到界面再开播，中间那几帧
+     * 拿的还是上一份列表，所以不管点哪年都先飞一遍上海。现在播放用的年份是同步的，
+     * 参数和 tourPlaying 在同一次重组里生效，绝不会用旧列表开路。
+     */
+    var tourYear by remember { mutableStateOf<Int?>(null) }
+
+    fun playYear(year: Int?) {
+        viewModel.selectYear(year)   // 地块着色 / 年份高亮跟着走
+        tourYear = year
+        tourRunId++
+        tourPlaying = true
+    }
+
+    // 静态图层：跟着 focusYear（当前的"只看这一年"）走，和播放解耦
     val officialRoute = remember(archiveEvents, board, section, focusYear) {
         archiveEvents
             .filter { board == Board.ALL || it.section == section }
@@ -97,39 +120,26 @@ fun MapScreen(
             .map { it.toSpot() }
     }
 
-    // 巡演点亮动画：点某个年份 / 全体就直接播放，不需要再按播放键
-    var tourPlaying by remember { mutableStateOf(false) }
-    // 每次点年份递增，用来重启动画（点同一年也能重播）
-    var tourRunId by remember { mutableIntStateOf(0) }
-
-    // 点年份后先记下「想播哪一年」，等 focusYear 这个 StateFlow 真的生效、tourSpots 跟着重算完再开播。
-    // 否则动画会拿着上一份列表先跑一段，第一座城永远是 2014 的上海。
-    var pendingYear by remember { mutableStateOf<Int?>(null) }
-    var pendingAll by remember { mutableStateOf(false) }
-
-    LaunchedEffect(focusYear, pendingYear, pendingAll) {
-        val ready = if (pendingAll) focusYear == null else pendingYear != null && focusYear == pendingYear
-        if (!ready) return@LaunchedEffect
-        pendingYear = null
-        pendingAll = false
-        // 再等一帧，确保画布收到的 tourSpots 已经是新年份的那一份
-        withFrameNanos { }
-        tourRunId++
-        tourPlaying = true
-    }
-
-    // 播放序列：默认播官方路线（当年官方开过哪些场）；只有把图层切到「我的线」才播自己的路线。
-    // 两条线在地图上是分开画的，播放不会把「我的路线」盖掉。
-    val tourSpots = remember(spots, myRoute, officialRoute, focusYear, routeMode) {
-        val byYear = { list: List<Spot> ->
-            if (focusYear == null) list else list.filter { yearOf(it.performedAt) == focusYear }
+    // 播放序列拆成两条：官方当年开过的场次 + 我当年真的去过的行程。
+    // 两条各播各的动画（官方淡、我的亮），不再「只播官方、我的路线当背景」。
+    val officialTour = remember(archiveEvents, board, section, tourYear, routeMode) {
+        if (!routeMode.showOfficial) {
+            emptyList()
+        } else {
+            archiveEvents
+                .filter { board == Board.ALL || it.section == section }
+                .filter { tourYear == null || it.year == tourYear }
+                .sortedBy { it.performedAt }
+                .map { it.toSpot() }
         }
-        val mine = byYear(myRoute)
-        when {
-            routeMode.showOfficial && officialRoute.isNotEmpty() -> officialRoute
-            routeMode.showMine && mine.isNotEmpty() -> mine
-            officialRoute.isNotEmpty() -> officialRoute
-            else -> byYear(spots)
+    }
+    val mineTour = remember(myRoute, tourYear, routeMode) {
+        if (!routeMode.showMine) {
+            emptyList()
+        } else {
+            myRoute
+                .filter { tourYear == null || yearOf(it.performedAt) == tourYear }
+                .sortedBy { it.performedAt }
         }
     }
 
@@ -169,7 +179,8 @@ fun MapScreen(
             darkProgress = darkProgress,
             yearLayers = yearLayers,
             focusYear = focusYear,
-            tourSpots = tourSpots,
+            officialTour = officialTour,
+            mineTour = mineTour,
             tourPlaying = tourPlaying,
             tourRunId = tourRunId,
             onTourEnd = { tourPlaying = false },
@@ -204,9 +215,8 @@ fun MapScreen(
                     isDark = isDark,
                     focusYear = focusYear,
                     onSelect = { year ->
-                        viewModel.selectYear(year)
-                        tourRunId++
-                        tourPlaying = true
+                        // 点年份立刻开播：播放用的年份和播放开关在同一次重组里，不会再拿旧列表
+                        playYear(year)
                     },
                 )
             }

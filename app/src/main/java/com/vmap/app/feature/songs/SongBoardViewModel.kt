@@ -386,7 +386,9 @@ class SongBoardViewModel(
     private fun key(title: String, artist: String) = "${title.trim()}|${artist.trim()}".lowercase()
 
     private companion object {
-        const val KEY_SEEDED = "songs_seeded_v5"
+        // v6：B 站视频封面补齐后重新落一次盘。版本号变化那一次会用档案里的封面覆盖一遍
+        // （包括之前手动换过的），之后启动不再动。
+        const val KEY_SEEDED = "songs_seeded_v6"
     }
 
     private fun parseLine(raw: String): Triple<String, String, Int>? {
